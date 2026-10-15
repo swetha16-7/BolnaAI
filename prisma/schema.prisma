@@ -1,0 +1,289 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id            String        @id @default(cuid())
+  name          String
+  slug          String        @unique
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  memberships   UserMembership[]
+  agents        Agent[]
+  contacts      Contact[]
+  calls         Call[]
+  appointments Appointment[]
+  dailyCallUsage DailyCallUsage[]
+  auditLogs     AuditLog[]
+  invitations   Invitation[]
+}
+
+model User {
+  id           String           @id @default(cuid())
+  email        String           @unique
+  name         String
+  passwordHash String?
+  role         UserRole         @default(ADMIN)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  memberships  UserMembership[]
+  auditLogs    AuditLog[]
+  createdAgents Agent[]
+  createdCalls Call[]
+  sentInvitations Invitation[] @relation("InvitationCreator")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  OPERATOR
+  VIEWER
+}
+
+model UserMembership {
+  id             String        @id @default(cuid())
+  userId         String
+  organizationId String
+  role           MembershipRole @default(MEMBER)
+  createdAt      DateTime      @default(now())
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MANAGER
+  MEMBER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+model Invitation {
+  id              String           @id @default(cuid())
+  organizationId  String
+  invitedByUserId String
+  email           String
+  role            MembershipRole
+  tokenHash       String           @unique
+  status          InvitationStatus @default(PENDING)
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy       User             @relation("InvitationCreator", fields: [invitedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status, expiresAt])
+  @@index([invitedByUserId, createdAt])
+}
+
+model Agent {
+  id              String        @id @default(cuid())
+  organizationId  String
+  createdByUserId String
+  name            String
+  type            String
+  status          String        @default("active")
+  timezone        String        @default("UTC")
+  languages       String[]      @default([])
+  provider        String?
+  voiceName       String?
+  speed           Float?        @default(1)
+  greeting        String?
+  systemPrompt    String?
+  fallback        String?
+  kbLinks         String?
+  kbFiles         Json?
+  kbFaqs          Json?
+  workingDays     String[]      @default([])
+  hoursStart      String?
+  hoursEnd        String?
+  holidays        String?
+  callsToday      Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy       User          @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  calls           Call[]
+  providerLinks   ProviderLink[]
+}
+
+model Contact {
+  id            String       @id @default(cuid())
+  organizationId String
+  firstName     String
+  lastName      String?
+  email         String?
+  phone         String?
+  company       String?
+  title         String?
+  source        String?
+  status        String       @default("new")
+  value         String?
+  lastContactAt DateTime?
+  voiceConsentAt DateTime?
+  voiceConsentSource String?
+  voiceConsentEvidence String?
+  voiceConsentRevokedAt DateTime?
+  doNotCall     Boolean      @default(false)
+  doNotCallAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  calls        Call[]
+  appointments Appointment[]
+}
+
+model PhoneNumber {
+  id              String   @id @default(cuid())
+  organizationId  String
+  provider        String
+  number          String   @unique
+  status          String   @default("active")
+  assignedAgentId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ProviderConnection {
+  id             String   @id @default(cuid())
+  organizationId String
+  provider       String
+  name           String
+  credentialRef  String
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, provider])
+}
+
+model ProviderLink {
+  id         String   @id @default(cuid())
+  agentId    String
+  provider   String
+  providerId String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  agent      Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, provider, providerId])
+}
+
+model Call {
+  id              String       @id @default(cuid())
+  organizationId  String
+  agentId         String?
+  contactId       String?
+  createdByUserId String?
+  externalCallId  String?
+  twilioCallSid   String?      @unique
+  idempotencyKey  String?
+  provider        String?
+  direction       String       @default("outbound")
+  status          String       @default("pending")
+  outcome         String?
+  callerNumber    String?
+  destination     String?
+  durationSeconds Int?
+  transcript      String?      @db.Text
+  startedAt       DateTime?
+  endedAt         DateTime?
+  transcriptUrl   String?
+  recordingUrl    String?
+  failureCode     String?
+  failureMessage  String?
+  metadata        Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent           Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  contact         Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  createdBy       User?        @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  events          CallEvent[]
+  transcripts     Transcript[]
+
+  @@unique([organizationId, idempotencyKey])
+  @@unique([provider, externalCallId])
+  @@index([organizationId, createdAt])
+}
+
+model CallEvent {
+  id              String   @id @default(cuid())
+  callId          String
+  eventType       String
+  payload         Json
+  source          String?
+  externalEventId String?
+  createdAt       DateTime @default(now())
+  call            Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@unique([source, externalEventId])
+  @@index([callId, createdAt])
+}
+
+model DailyCallUsage {
+  id             String       @id @default(cuid())
+  organizationId String
+  dayKey         String
+  callCount      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, dayKey])
+}
+
+model Transcript {
+  id        String   @id @default(cuid())
+  callId    String
+  sender    String
+  text      String
+  createdAt DateTime @default(now())
+  call      Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+}
+
+model Appointment {
+  id            String       @id @default(cuid())
+  organizationId String
+  contactId     String?
+  agentId       String?
+  calcomEventId String?
+  status        String       @default("pending")
+  startsAt      DateTime
+  endsAt        DateTime?
+  timezone      String?
+  serviceName   String?
+  provider      String?
+  metadata      Json?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact       Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id            String       @id @default(cuid())
+  organizationId String?
+  userId        String?
+  entity        String
+  action        String
+  details       Json?
+  createdAt     DateTime     @default(now())
+  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  user          User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
