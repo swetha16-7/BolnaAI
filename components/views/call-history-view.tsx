@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, type FormEvent } from "react";
 import { MessageSquare, PhoneCall, Search } from "lucide-react";
 import { useAppState, type Call, type ContactRecord } from "@/context/StateContext";
 import { ApiError, api, type ApiRetellCall } from "@/lib/api-client";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, generateSecureClientUuid } from "@/lib/utils";
 import {
   runOutboundCallOnce,
   validateOutboundCallForm,
@@ -107,10 +107,21 @@ export const CallHistoryView: React.FC = () => {
 
     const normalizedDestination = destination.trim();
     const intent = `${selectedCallAgentId}\u0000direct\u0000${normalizedDestination}`;
-    if (callIdempotencyRef.current?.intent !== intent) {
-      callIdempotencyRef.current = { intent, key: window.crypto.randomUUID() };
+
+    let idempotencyKey: string;
+    try {
+      if (callIdempotencyRef.current?.intent !== intent) {
+        callIdempotencyRef.current = { intent, key: generateSecureClientUuid() };
+      }
+      idempotencyKey = callIdempotencyRef.current.key;
+    } catch (error) {
+      setCallError(
+        error instanceof Error
+          ? error.message
+          : "Unable to generate a secure request key. Check your browser security settings.",
+      );
+      return;
     }
-    const idempotencyKey = callIdempotencyRef.current.key;
 
     await runOutboundCallOnce(callSubmissionPending, async () => {
       setCallSubmitting(true);

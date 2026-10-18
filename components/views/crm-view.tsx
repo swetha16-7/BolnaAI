@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAppState, type ContactRecord } from "@/context/StateContext";
+import { generateSecureClientUuid } from "@/lib/utils";
 import { Mail, Phone, PhoneCall, Plus, Search, Pencil, X } from "lucide-react";
 
 const tabs = [
@@ -174,14 +175,32 @@ export const CrmView: React.FC = () => {
     if (!callingContact || !callAgentId || !callConsentConfirmed || callSubmitting) return;
     setCallSubmitting(true);
     try {
+      let idempotencyKey: string;
+      try {
+        idempotencyKey = generateSecureClientUuid();
+      } catch (error) {
+        showToast(
+          error instanceof Error
+            ? error.message
+            : "Unable to generate a secure request key. Check your browser security settings.",
+          "error",
+        );
+        return;
+      }
+
       const call = await createCall({
         agentId: callAgentId,
         contactId: callingContact.id,
         destination: callingContact.phone ?? "",
         consentConfirmed: callConsentConfirmed,
-        idempotencyKey: window.crypto.randomUUID(),
+        idempotencyKey,
       });
       if (call) setCallingContact(null);
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Unable to initiate call.",
+        "error",
+      );
     } finally {
       setCallSubmitting(false);
     }
