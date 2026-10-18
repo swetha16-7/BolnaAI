@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -39,10 +39,11 @@ const textFill = "#71717a";
 export const AnalyticsView: React.FC = () => {
   const { agents, dashboard, activeCalls } = useAppState();
   const [retellCalls, setRetellCalls] = useState<ApiRetellCall[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [now] = useState(() => Date.now());
 
-  const fetchCalls = async () => {
+  const fetchCalls = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -53,10 +54,30 @@ export const AnalyticsView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    void fetchCalls();
+    let cancelled = false;
+    const loadInitial = async () => {
+      try {
+        const result = await api.retellCalls.list(new URLSearchParams({ pageSize: "100" }));
+        if (!cancelled) {
+          setRetellCalls(result.calls);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Unable to load Retell analytics data.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+    void loadInitial();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 1. Strict deduplication of calls by unique callId
@@ -190,7 +211,6 @@ export const AnalyticsView: React.FC = () => {
       weeksMap.set(`Week ${5 - w}`, { totalSeconds: 0, count: 0 });
     }
 
-    const now = Date.now();
     const msPerWeek = 7 * 24 * 60 * 60 * 1000;
 
     for (const call of uniqueCalls) {
@@ -212,7 +232,7 @@ export const AnalyticsView: React.FC = () => {
       week,
       minutes: stats.count > 0 ? Number((stats.totalSeconds / stats.count / 60).toFixed(2)) : 0,
     }));
-  }, [uniqueCalls]);
+  }, [uniqueCalls, now]);
 
   // 7. Missed / Failed Calls Trend (Strictly 5 unique week buckets)
   const missedCallsData = useMemo(() => {
@@ -221,7 +241,6 @@ export const AnalyticsView: React.FC = () => {
       weeksMap.set(`Week ${5 - w}`, { total: 0, failed: 0 });
     }
 
-    const now = Date.now();
     const msPerWeek = 7 * 24 * 60 * 60 * 1000;
 
     for (const call of uniqueCalls) {
@@ -245,7 +264,7 @@ export const AnalyticsView: React.FC = () => {
       week,
       rate: stats.total > 0 ? Number(((stats.failed / stats.total) * 100).toFixed(1)) : 0,
     }));
-  }, [uniqueCalls]);
+  }, [uniqueCalls, now]);
 
   // 8. Agent Performance (Strictly unique agent names)
   const agentPerformanceData = useMemo(() => {

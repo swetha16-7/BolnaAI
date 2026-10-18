@@ -413,7 +413,6 @@ function mapRetellContact(contact: ApiRetellContact): ContactRecord {
     ? new Date(contact.lastConversationTimestamp).toISOString()
     : null;
   const nameParts = [contact.firstName, contact.lastName].filter(Boolean);
-  const displayName = nameParts.length > 0 ? nameParts.join(" ") : "Unnamed contact";
 
   return {
     id: contact.contactId,

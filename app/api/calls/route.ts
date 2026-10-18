@@ -5,7 +5,7 @@ import { requireOrganizationAccess } from "@/lib/server/auth/organization";
 import { apiErrorResponse, parseJsonRequest } from "@/lib/server/http";
 import { organizationScope } from "@/lib/server/auth/tenant-scope";
 import { callPublicSelect } from "@/lib/server/selects";
-import { callCreateSchema, phoneSchema } from "@/lib/server/validation/schemas";
+import { callCreateSchema } from "@/lib/server/validation/schemas";
 import {
   ACTIVE_CALL_STATUSES,
   canCreateOutboundCall,
@@ -29,7 +29,6 @@ import {
 import { synchronizeActiveRetellCalls } from "@/lib/server/calls/retell-sync";
 
 const MAX_PAGE_SIZE = 100;
-const DEFAULT_DAILY_LIMIT = 5;
 
 
 

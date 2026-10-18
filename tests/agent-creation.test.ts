@@ -12,7 +12,6 @@ import {
   resolveRetellVoiceId,
   createRetellClient,
   createRetellAgentWithLlm,
-  deleteRetellAgentAndLlm,
   getRetellAgentCreateFailure,
   RetellAgentCreateResponseError,
 } from "../lib/server/calls/retell.ts";

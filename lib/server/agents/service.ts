@@ -172,7 +172,7 @@ export async function createOrganizationAgent(input: {
         status: 201,
         agent: presentAgent(agent),
       };
-    } catch (dbError) {
+    } catch (_dbError) {
       // Safe recovery: rollback newly created Retell resources since local persistence failed
       await deleteRetellAgentAndLlm(
         retellClient,

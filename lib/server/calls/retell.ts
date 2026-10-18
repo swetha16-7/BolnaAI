@@ -664,7 +664,7 @@ export function buildRetellSystemPrompt(data: {
   return parts.join("\n\n");
 }
 
-export function resolveRetellVoiceId(voiceName?: string | null, provider?: string | null): string {
+export function resolveRetellVoiceId(voiceName?: string | null, _provider?: string | null): string {
   if (!voiceName || !voiceName.trim()) {
     return "retell-Cimo";
   }

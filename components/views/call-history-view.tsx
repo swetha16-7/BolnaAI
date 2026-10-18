@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, type FormEvent } from "react";
 import { MessageSquare, PhoneCall, Search } from "lucide-react";
-import { useAppState, type Call, type ContactRecord } from "@/context/StateContext";
+import { useAppState, type Call } from "@/context/StateContext";
 import { ApiError, api, type ApiRetellCall } from "@/lib/api-client";
 import { formatDateTime, generateSecureClientUuid } from "@/lib/utils";
 import {
@@ -59,7 +59,7 @@ function timestampLabel(timestamp: string) {
 }
 
 export const CallHistoryView: React.FC = () => {
-  const { agents, contacts } = useAppState();
+  const { agents } = useAppState();
   const [search, setSearch] = useState("");
   const [agentFilter, setAgentFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
