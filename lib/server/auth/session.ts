@@ -1,7 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies } from "next/headers.js";
 
-import { prisma } from "@/lib/server/db";
+import { prisma } from "../db.ts";
 
 export type SessionUser = {
   id: string;
@@ -31,6 +31,27 @@ function getSessionSecret() {
 
 export function assertSessionConfiguration() {
   getSessionSecret();
+}
+
+/**
+ * Resolves whether session and organization cookies should be issued with the `Secure` attribute.
+ *
+ * Rules:
+ * - If `COOKIE_SECURE` is explicitly set to `"false"`, returns `false` (allows plain HTTP access).
+ * - If `COOKIE_SECURE` is explicitly set to `"true"`, returns `true` (enforces HTTPS).
+ * - If `COOKIE_SECURE` is unset, empty, or set to an unrecognized value, it preserves the safe default (`NODE_ENV === "production"`).
+ */
+export function isCookieSecure(
+  environment: Record<string, string | undefined> = process.env,
+): boolean {
+  const configured = environment.COOKIE_SECURE?.trim().toLowerCase();
+  if (configured === "false") {
+    return false;
+  }
+  if (configured === "true") {
+    return true;
+  }
+  return environment.NODE_ENV === "production";
 }
 
 function signSessionPayload(payload: string) {
@@ -125,10 +146,11 @@ export async function setSessionCookie(userId: string) {
   });
   const payloadEncoded = encodeSessionPayload(payload);
   const signature = signSessionPayload(payloadEncoded);
+  const secure = isCookieSecure();
 
   cookieStore.set(SESSION_COOKIE, `${payloadEncoded}.${signature}`, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure,
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_DURATION_SECONDS,
@@ -137,16 +159,17 @@ export async function setSessionCookie(userId: string) {
 
 export async function clearSessionCookie() {
   const cookieStore = await cookies();
+  const secure = isCookieSecure();
   cookieStore.set(SESSION_COOKIE, "", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure,
     sameSite: "lax",
     path: "/",
     maxAge: 0,
   });
   cookieStore.set(ORGANIZATION_COOKIE, "", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure,
     sameSite: "lax",
     path: "/",
     maxAge: 0,
@@ -155,9 +178,10 @@ export async function clearSessionCookie() {
 
 export async function setActiveOrganizationCookie(organizationId: string) {
   const cookieStore = await cookies();
+  const secure = isCookieSecure();
   cookieStore.set(ORGANIZATION_COOKIE, organizationId, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure,
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_DURATION_SECONDS,
