@@ -272,6 +272,7 @@ export async function POST(request: Request) {
     if (!gate.allowed || !apiKey || !providerLink) {
       return NextResponse.json({
         error: "Outbound calling is disabled until provider credentials, agent/number mapping, allowed destinations, and calling safeguards are verified.",
+        details: gate.blockers,
       }, { status: 501 });
     }
 

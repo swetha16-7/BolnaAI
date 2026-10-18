@@ -157,11 +157,15 @@ export const CallHistoryView: React.FC = () => {
         }
         setRetellRefresh((count) => count + 1);
       } catch (error) {
-        setCallError(
-          error instanceof ApiError
-            ? error.message
-            : "Unable to submit the call request. Check your connection and try again.",
-        );
+        if (error instanceof ApiError && Array.isArray(error.details) && error.details.length > 0) {
+          setCallError(`${error.message} (${error.details.join(", ")})`);
+        } else {
+          setCallError(
+            error instanceof ApiError
+              ? error.message
+              : "Unable to submit the call request. Check your connection and try again.",
+          );
+        }
       } finally {
         setCallSubmitting(false);
       }
