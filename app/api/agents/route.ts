@@ -8,10 +8,6 @@ import { organizationScope } from "@/lib/server/auth/tenant-scope";
 import { agentPublicSelect } from "@/lib/server/selects";
 import { presentAgent } from "@/lib/server/agent-response";
 
-import { createRetellClient } from "@/lib/server/calls/retell";
-import { getRetellApiKey } from "@/lib/server/providers/configuration";
-import { createOrganizationAgent } from "@/lib/server/agents/service";
-
 export async function GET() {
   try {
     const { user, organization } = await requireOrganizationAccess({
@@ -52,37 +48,35 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    const apiKey = getRetellApiKey();
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "Retell agent creation is not configured on the server." },
-        { status: 503 },
-      );
-    }
-
-    const idempotencyKey =
-      request.headers.get("idempotency-key")?.trim() ||
-      (typeof body === "object" && body && "idempotencyKey" in body && typeof body.idempotencyKey === "string"
-        ? body.idempotencyKey.trim()
-        : null) ||
-      null;
-
-    const retellClient = createRetellClient(apiKey);
-    const result = await createOrganizationAgent({
-      organizationId: organization.id,
-      userId: user.id,
-      data: parsed.data,
-      idempotencyKey,
-      retellClient,
+    const data = parsed.data;
+    const agent = await prisma.agent.create({
+      data: {
+        organizationId: organization.id,
+        createdByUserId: user.id,
+        name: data.name,
+        type: data.type,
+        timezone: data.timezone,
+        provider: data.provider ?? "Deepgram",
+        voiceName: data.voiceName ?? "Aura-Asteria",
+        speed: data.speed ?? 1,
+        languages: data.languages,
+        greeting: data.greeting ?? "Hello.",
+        systemPrompt: data.systemPrompt ?? "",
+        fallback: data.fallback ?? "",
+        kbLinks: data.kbLinks ?? "",
+        kbFiles: data.kbFiles ?? [],
+        kbFaqs: data.kbFaqs ?? [],
+        workingDays: data.workingDays ?? [],
+        hoursStart: data.hoursStart ?? null,
+        hoursEnd: data.hoursEnd ?? null,
+        holidays: data.holidays ?? "",
+        status: data.status,
+      },
+      select: agentPublicSelect,
     });
 
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
-    }
-
-    return NextResponse.json({ agent: result.agent }, { status: result.status });
+    return NextResponse.json({ agent: presentAgent(agent) }, { status: 201 });
   } catch (error) {
     return apiErrorResponse(error, "Unable to create agent.");
   }
 }
-

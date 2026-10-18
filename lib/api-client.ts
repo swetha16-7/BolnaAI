@@ -303,17 +303,8 @@ export const api = {
         `/api/agents/${encodeURIComponent(agentId)}/retell-link`,
         { method: "POST", body: jsonBody({ retellAgentId }) },
       ),
-    create: (agent: Record<string, unknown>) => {
-      const headers: Record<string, string> = {};
-      if (typeof agent.idempotencyKey === "string" && agent.idempotencyKey) {
-        headers["Idempotency-Key"] = agent.idempotencyKey;
-      }
-      return apiRequest<{ agent: ApiAgent }>("/api/agents", {
-        method: "POST",
-        headers,
-        body: jsonBody(agent),
-      });
-    },
+    create: (agent: Record<string, unknown>) =>
+      apiRequest<{ agent: ApiAgent }>("/api/agents", { method: "POST", body: jsonBody(agent) }),
     update: (id: string, agent: Record<string, unknown>) =>
       apiRequest<{ agent: ApiAgent }>(`/api/agents/${encodeURIComponent(id)}`, {
         method: "PATCH",

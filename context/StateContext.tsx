@@ -11,7 +11,6 @@ import {
   type ApiRetellContact,
   type ApiUser,
 } from "@/lib/api-client";
-import { generateSecureClientUuid } from "@/lib/utils";
 
 export interface FAQ {
   q: string;
@@ -442,7 +441,7 @@ function mapRetellContact(contact: ApiRetellContact): ContactRecord {
   };
 }
 
-function toAgentInput(agent: Agent, idempotencyKey?: string): Record<string, unknown> {
+function toAgentInput(agent: Agent): Record<string, unknown> {
   return {
     name: agent.name,
     type: agent.type,
@@ -462,7 +461,6 @@ function toAgentInput(agent: Agent, idempotencyKey?: string): Record<string, unk
     hoursEnd: agent.hoursEnd,
     holidays: agent.holidays,
     status: agent.status,
-    ...(idempotencyKey ? { idempotencyKey } : {}),
   };
 }
 
@@ -809,16 +807,10 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addAgent = async (agent: Agent) => {
     try {
-      let idempotencyKey: string | undefined;
-      try {
-        idempotencyKey = generateSecureClientUuid();
-      } catch {
-        // If client secure randomness is unavailable, proceed without key
-      }
-      const result = await api.agents.create(toAgentInput(agent, idempotencyKey));
+      const result = await api.agents.create(toAgentInput(agent));
       const created = mapAgent(result.agent);
       setAgents((previous) => [created, ...previous]);
-      showToast(`Agent '${created.name}' saved and synced with Retell.`, "success");
+      showToast(`Agent '${created.name}' saved.`, "success");
       return true;
     } catch (error) {
       reportMutationError(error, "Unable to create agent.");

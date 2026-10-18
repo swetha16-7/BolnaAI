@@ -51,7 +51,6 @@ export const agentSchema = z.object({
   hoursEnd: z.string().optional(),
   holidays: z.string().optional(),
   status: z.enum(["active", "paused"]).default("active"),
-  idempotencyKey: z.string().trim().max(128).optional(),
 });
 
 export const loginSchema = z.object({

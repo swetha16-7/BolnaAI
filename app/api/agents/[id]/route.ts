@@ -104,9 +104,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: "Agent not found." }, { status: 404 });
     }
 
-    // Ownership policy: Local archive sets status to "paused" to preserve historical calls and audit trails.
-    // Destructive provider deletions (client.agent.delete) are intentionally not executed here to avoid
-    // destroying carrier phone number associations, webhook configurations, or active call states in Retell.
     await prisma.agent.update({
       where: { id },
       data: { status: "paused" },
