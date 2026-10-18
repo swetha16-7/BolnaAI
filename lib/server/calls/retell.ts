@@ -618,3 +618,242 @@ export async function resolveRetellAgentPhoneNumber(
 
   return resolvedNumber;
 }
+
+export function buildRetellSystemPrompt(data: {
+  type?: string | null;
+  systemPrompt?: string | null;
+  fallback?: string | null;
+  kbFaqs?: unknown;
+  workingDays?: string[] | null;
+  hoursStart?: string | null;
+  hoursEnd?: string | null;
+  timezone?: string | null;
+}): string {
+  const parts: string[] = [];
+  if (data.systemPrompt?.trim()) {
+    parts.push(data.systemPrompt.trim());
+  } else if (data.type?.trim()) {
+    parts.push(`You are a professional voice agent acting as ${data.type.trim()}.`);
+  }
+
+  if (data.fallback?.trim()) {
+    parts.push(`Fallback instructions: If you cannot answer a question or encounter an error, say: "${data.fallback.trim()}".`);
+  }
+
+  if (Array.isArray(data.kbFaqs) && data.kbFaqs.length > 0) {
+    const validFaqs = data.kbFaqs
+      .filter((faq): faq is { q: string; a: string } =>
+        Boolean(
+          faq &&
+            typeof faq === "object" &&
+            typeof (faq as { q?: unknown }).q === "string" &&
+            typeof (faq as { a?: unknown }).a === "string" &&
+            (faq as { q: string }).q.trim(),
+        ),
+      )
+      .map((faq) => `Q: ${faq.q.trim()}\nA: ${faq.a.trim()}`);
+    if (validFaqs.length > 0) {
+      parts.push(`Knowledge Base FAQs:\n${validFaqs.join("\n\n")}`);
+    }
+  }
+
+  if (data.workingDays && data.workingDays.length > 0 && data.hoursStart && data.hoursEnd) {
+    parts.push(`Operating Hours (${data.timezone || "UTC"}): ${data.workingDays.join(", ")} from ${data.hoursStart} to ${data.hoursEnd}.`);
+  }
+
+  return parts.join("\n\n");
+}
+
+export function resolveRetellVoiceId(voiceName?: string | null, provider?: string | null): string {
+  if (!voiceName || !voiceName.trim()) {
+    return "retell-Cimo";
+  }
+  const normalized = voiceName.trim();
+
+  // Map known BolnaAI preset names to Retell voice IDs
+  switch (normalized) {
+    case "Aura-Asteria":
+    case "Aura-Athena":
+      return "11labs-Jenny";
+    case "Aura-Orpheus":
+      return "11labs-Adrian";
+    case "Cartesia-Sonic":
+      return "retell-Cimo";
+    case "Cartesia-British":
+      return "11labs-George";
+    case "Kokoro-Default":
+      return "retell-Cimo";
+    case "Coqui-Cloned-Voice":
+      return "retell-Cimo";
+  }
+
+  // If already prefixed by a recognized voice provider in Retell
+  if (/^(retell|11labs|cartesia|openai|fish_audio|minimax|inworld)-/i.test(normalized)) {
+    return normalized;
+  }
+
+  return "retell-Cimo";
+}
+
+export type CreateRetellAgentInput = {
+  name: string;
+  type?: string | null;
+  timezone?: string | null;
+  voiceName?: string | null;
+  provider?: string | null;
+  speed?: number | null;
+  greeting?: string | null;
+  systemPrompt?: string | null;
+  fallback?: string | null;
+  kbFaqs?: unknown;
+  workingDays?: string[] | null;
+  hoursStart?: string | null;
+  hoursEnd?: string | null;
+};
+
+export type CreatedRetellAgentResult = {
+  retellAgentId: string;
+  llmId: string;
+};
+
+export class RetellAgentCreateResponseError extends Error {
+  constructor(message = "Retell returned an invalid agent creation response.") {
+    super(message);
+    this.name = "RetellAgentCreateResponseError";
+  }
+}
+
+export async function createRetellAgentWithLlm(
+  client: Retell,
+  input: CreateRetellAgentInput,
+): Promise<CreatedRetellAgentResult> {
+  const generalPrompt = buildRetellSystemPrompt(input);
+  const beginMessage = input.greeting?.trim() || null;
+
+  // 1. Create the Retell LLM response engine
+  const llmResponse = await client.llm.create({
+    general_prompt: generalPrompt || null,
+    begin_message: beginMessage,
+  });
+
+  if (!llmResponse || typeof llmResponse.llm_id !== "string" || !llmResponse.llm_id) {
+    throw new RetellAgentCreateResponseError("Retell LLM creation did not return a valid llm_id.");
+  }
+
+  const llmId = llmResponse.llm_id;
+
+  // 2. Create the Retell Agent attached to the LLM
+  try {
+    const voiceId = resolveRetellVoiceId(input.voiceName, input.provider);
+    const voiceSpeed = typeof input.speed === "number" && input.speed >= 0.5 && input.speed <= 2.0
+      ? input.speed
+      : 1.0;
+
+    const agentResponse = await client.agent.create({
+      agent_name: input.name.trim(),
+      response_engine: {
+        type: "retell-llm",
+        llm_id: llmId,
+      },
+      voice_id: voiceId,
+      voice_speed: voiceSpeed,
+    });
+
+    if (!agentResponse || typeof agentResponse.agent_id !== "string" || !agentResponse.agent_id) {
+      throw new RetellAgentCreateResponseError("Retell agent creation did not return a valid agent_id.");
+    }
+
+    return {
+      retellAgentId: agentResponse.agent_id,
+      llmId,
+    };
+  } catch (error) {
+    // If agent creation fails after LLM was created, clean up orphaned LLM
+    try {
+      await client.llm.delete(llmId);
+    } catch {
+      // Best-effort cleanup
+    }
+    throw error;
+  }
+}
+
+export async function deleteRetellAgentAndLlm(
+  client: Retell,
+  retellAgentId: string,
+  llmId?: string | null,
+): Promise<void> {
+  try {
+    await client.agent.delete(retellAgentId);
+  } catch (error) {
+    console.error(`Failed to clean up newly created Retell agent ${retellAgentId}:`, error);
+  }
+  if (llmId) {
+    try {
+      await client.llm.delete(llmId);
+    } catch (error) {
+      console.error(`Failed to clean up newly created Retell LLM ${llmId}:`, error);
+    }
+  }
+}
+
+export function getRetellAgentCreateFailure(error: unknown) {
+  if (error instanceof APIConnectionTimeoutError) {
+    return {
+      status: 504,
+      message: "Retell agent creation timed out. Try again shortly.",
+    };
+  }
+
+  if (error instanceof APIConnectionError) {
+    return {
+      status: 502,
+      message: "Could not connect to Retell for agent creation. Check network access and try again.",
+    };
+  }
+
+  if (error instanceof APIError) {
+    if (error.status === 401) {
+      return {
+        status: 502,
+        message: "Retell rejected the configured API key. Verify RETELL_API_KEY is active and belongs to the intended Retell account.",
+      };
+    }
+    if (error.status === 403) {
+      return {
+        status: 502,
+        message: "The Retell API key does not have permission to create agents. Check Retell account access.",
+      };
+    }
+    if (error.status === 429) {
+      return {
+        status: 503,
+        message: "Retell rate-limited agent creation. Try again shortly.",
+      };
+    }
+    if (error.status >= 500) {
+      return {
+        status: 502,
+        message: "Retell is temporarily unavailable for agent creation. Try again shortly.",
+      };
+    }
+
+    return {
+      status: 502,
+      message: `Retell rejected agent creation (HTTP ${error.status}). Check configuration and try again.`,
+    };
+  }
+
+  if (error instanceof RetellAgentCreateResponseError) {
+    return {
+      status: 502,
+      message: error.message,
+    };
+  }
+
+  return {
+    status: 500,
+    message: "An internal error occurred while creating the Retell agent.",
+  };
+}
+
