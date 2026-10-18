@@ -103,6 +103,7 @@ export interface ApiContactPage {
 
 export interface ApiCall {
   id: string;
+  externalCallId?: string | null;
   agentId: string | null;
   callerNumber: string | null;
   destination: string | null;

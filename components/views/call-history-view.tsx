@@ -134,7 +134,7 @@ export const CallHistoryView: React.FC = () => {
           );
           if (result.call) {
             const newRetellCall: ApiRetellCall = {
-              callId: result.call.id,
+              callId: result.call.externalCallId || result.call.id,
               agentId: selectedCallAgentId,
               agentName: callAgents.find((a) => a.id === selectedCallAgentId)?.name || "Agent",
               callType: "phone_call",

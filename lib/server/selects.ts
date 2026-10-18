@@ -53,6 +53,7 @@ export const contactPublicSelect = {
 
 export const callPublicSelect = {
   id: true,
+  externalCallId: true,
   agentId: true,
   contactId: true,
   callerNumber: true,
@@ -81,6 +82,7 @@ export const callPublicSelect = {
 
 export const callSummarySelect = {
   id: true,
+  externalCallId: true,
   agentId: true,
   callerNumber: true,
   destination: true,
