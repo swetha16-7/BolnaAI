@@ -6,11 +6,22 @@ import {
   validateOutboundCallForm,
 } from "../lib/calls/outbound-form.ts";
 import {
+  APIConnectionError,
+  APIConnectionTimeoutError,
+  APIError,
+} from "retell-sdk";
+import {
   canCreateOutboundCall,
+  evaluateOutboundPolicyGate,
   isMatchingCallReplay,
   isOutboundCallingEnabled,
 } from "../lib/server/calls/policy.ts";
-import { createRetellClient, initiateRetellPhoneCall } from "../lib/server/calls/retell.ts";
+import {
+  createRetellClient,
+  getRetellCallFailure,
+  initiateRetellPhoneCall,
+  RetellCallResponseError,
+} from "../lib/server/calls/retell.ts";
 import { callCreateSchema } from "../lib/server/validation/schemas.ts";
 
 const destination = "+14155552671";
@@ -232,3 +243,68 @@ test("successful submission uses a mocked Retell transport and validates provide
   assert.equal(outgoingBody?.override_agent_id, "retell-agent-1");
   assert.equal(outgoingBody?.idempotency_key, "550e8400-e29b-41d4-a716-446655440000");
 });
+
+test("provider failure and timeout errors are classified safely without losing status", () => {
+  const timeoutError = new APIConnectionTimeoutError({ message: "Timeout" });
+  const timeoutFailure = getRetellCallFailure(timeoutError);
+  assert.equal(timeoutFailure.isAmbiguous, true);
+  assert.equal(timeoutFailure.failureCode, "provider_response_unknown");
+
+  const connectionError = new APIConnectionError({ message: "Connection reset" });
+  const connectionFailure = getRetellCallFailure(connectionError);
+  assert.equal(connectionFailure.isAmbiguous, true);
+  assert.equal(connectionFailure.failureCode, "provider_response_unknown");
+
+  const responseError = new RetellCallResponseError();
+  const responseFailure = getRetellCallFailure(responseError);
+  assert.equal(responseFailure.isAmbiguous, true);
+  assert.equal(responseFailure.failureCode, "provider_response_unknown");
+
+  const apiError = new APIError(401, { message: "Unauthorized" }, "Unauthorized", new Headers());
+  const apiFailure = getRetellCallFailure(apiError);
+  assert.equal(apiFailure.isAmbiguous, false);
+  assert.equal(apiFailure.failureCode, "retell_http_401");
+
+  const genericError = new Error("Generic failure");
+  const genericFailure = getRetellCallFailure(genericError);
+  assert.equal(genericFailure.isAmbiguous, false);
+  assert.equal(genericFailure.failureCode, "retell_request_failed");
+});
+
+test("outbound policy gate accurately blocks calls when credentials, agent mapping, or safety approvals are missing", () => {
+  const baseGate = {
+    isPolicyEnabled: true,
+    hasApiKey: true,
+    hasProviderLink: true,
+    isUniquelyOwned: true,
+    allowedCountriesCount: 1,
+    dailyLimit: 5,
+  };
+
+  assert.equal(evaluateOutboundPolicyGate(baseGate).allowed, true);
+
+  const disabledPolicy = evaluateOutboundPolicyGate({ ...baseGate, isPolicyEnabled: false });
+  assert.equal(disabledPolicy.allowed, false);
+  assert.equal(disabledPolicy.blockers.includes("OUTBOUND_CALLING_POLICY_NOT_ENABLED"), true);
+
+  const missingKey = evaluateOutboundPolicyGate({ ...baseGate, hasApiKey: false });
+  assert.equal(missingKey.allowed, false);
+  assert.equal(missingKey.blockers.includes("MISSING_RETELL_API_KEY"), true);
+
+  const missingLink = evaluateOutboundPolicyGate({ ...baseGate, hasProviderLink: false });
+  assert.equal(missingLink.allowed, false);
+  assert.equal(missingLink.blockers.includes("MISSING_RETELL_PROVIDER_LINK"), true);
+
+  const nonUniqueLink = evaluateOutboundPolicyGate({ ...baseGate, isUniquelyOwned: false });
+  assert.equal(nonUniqueLink.allowed, false);
+  assert.equal(nonUniqueLink.blockers.includes("NON_UNIQUE_PROVIDER_LINK_OWNERSHIP"), true);
+
+  const noCountries = evaluateOutboundPolicyGate({ ...baseGate, allowedCountriesCount: 0 });
+  assert.equal(noCountries.allowed, false);
+  assert.equal(noCountries.blockers.includes("NO_ALLOWED_DESTINATION_COUNTRIES"), true);
+
+  const invalidDailyLimit = evaluateOutboundPolicyGate({ ...baseGate, dailyLimit: 0 });
+  assert.equal(invalidDailyLimit.allowed, false);
+  assert.equal(invalidDailyLimit.blockers.includes("INVALID_DAILY_CALL_LIMIT"), true);
+});
+
