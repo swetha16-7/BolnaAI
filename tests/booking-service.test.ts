@@ -251,6 +251,109 @@ test("2. No available slots returned from Cal.com", async () => {
   assert.match(result.message, /No available slots/i);
 });
 
+// Scenario 1b: October 27, 2026 villa viewing in Hyderabad with standard Cal.com v2 data.slots response format
+test("1b. Availability lookup for October 27, 2026 villa viewing in Hyderabad with standard Cal.com v2 data.slots format", async () => {
+  const mockDb = createMockDb();
+  // Simulated current time: evening of October 26, 2026 (IST)
+  const simulatedNow = new Date("2026-10-26T14:08:34.000Z");
+
+  let requestedUrl = "";
+  const mockCalFetch: typeof fetch = async (url, init) => {
+    requestedUrl = String(url);
+    const auth = (init?.headers as any)?.Authorization || (init?.headers as any)?.authorization;
+    assert.equal(auth, `Bearer ${VALID_CAL_ENV.CALCOM_API_KEY}`);
+    const apiVersion = (init?.headers as any)?.["cal-api-version"];
+    assert.equal(apiVersion, "2024-08-13");
+
+    // Standard Cal.com API v2 response with data.slots
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: {
+          slots: {
+            "2026-10-27": [
+              { time: "2026-10-27T04:30:00.000Z" }, // 10:00 AM in Asia/Kolkata (+5:30)
+              { time: "2026-10-27T06:30:00.000Z" }, // 12:00 PM in Asia/Kolkata (+5:30)
+              { time: "2026-10-27T09:30:00.000Z" }, // 03:00 PM in Asia/Kolkata (+5:30)
+            ],
+          },
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  const result = await checkAvailability(
+    {
+      appointment_type: "viewing",
+      preferred_date: "27-10-2026",
+      location: "Hyderabad",
+      property_type: "villa",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockCalFetch,
+    }
+  );
+
+  // Verify URL query parameters: eventTypeId, start, end, timeZone
+  assert.match(requestedUrl, /eventTypeId=123456/);
+  assert.match(requestedUrl, /timeZone=Asia%2FKolkata/);
+  // Start of day in Asia/Kolkata for Oct 27 is Oct 26 18:30:00Z
+  assert.match(requestedUrl, /start=2026-10-26T18%3A30%3A00\.000Z/);
+  // End of day (24h later) in Asia/Kolkata is Oct 27 18:30:00Z
+  assert.match(requestedUrl, /end=2026-10-27T18%3A30%3A00\.000Z/);
+
+  assert.equal(result.status, "available");
+  assert.equal(result.total_slots, 3);
+  assert.deepEqual(result.available_slots, ["10:00 AM", "12:00 PM", "03:00 PM"]);
+  assert.equal(result.date, "27-10-2026");
+  assert.equal(result.timezone, "Asia/Kolkata");
+  assert.match(result.message, /Slots are available on 27-10-2026: 10:00 AM, 12:00 PM, 03:00 PM/);
+});
+
+// Scenario 2b: Cal.com API v2 returns empty data.slots map for October 27, 2026
+test("2b. Cal.com API v2 returns empty data.slots map for October 27, 2026", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T14:08:34.000Z");
+
+  const mockEmptyV2Fetch: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: {
+          slots: {},
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  const result = await checkAvailability(
+    {
+      appointment_type: "viewing",
+      preferred_date: "27-10-2026",
+      location: "Hyderabad",
+      property_type: "villa",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockEmptyV2Fetch,
+    }
+  );
+
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.total_slots, 0);
+  assert.equal(result.available_slots.length, 0);
+  assert.equal(result.date, "27-10-2026");
+  assert.equal(result.timezone, "Asia/Kolkata");
+  assert.match(result.message, /No available slots on 27-10-2026/);
+});
+
 // Scenario 3: Successful booking
 test("3. Successful booking through Cal.com API v2 with DB persistence", async () => {
   const mockDb = createMockDb();
@@ -444,6 +547,41 @@ test("7. Cal.com rate limit (429) and timeout handled gracefully", async () => {
   );
   assert.equal(availTimeout.status, "error");
   assert.match(availTimeout.message, /timed out/i);
+});
+
+// Scenario 7b: Upstream Cal.com 500 server error
+test("7b. Cal.com upstream HTTP 500 error returns error status without fabricating slots", async () => {
+  const mockDb = createMockDb();
+
+  const mock500Fetch: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({ message: "Internal server error" }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  const avail500 = await checkAvailability(
+    { preferred_date: "27-10-2026", location: "Hyderabad" },
+    { db: mockDb as any, env: VALID_CAL_ENV, fetchFn: mock500Fetch }
+  );
+  assert.equal(avail500.status, "error");
+  assert.equal(avail500.available_slots.length, 0);
+  assert.equal(avail500.total_slots, 0);
+  assert.match(avail500.message, /HTTP 500/i);
+
+  const book500 = await bookAppointment(
+    {
+      name: "Suresh",
+      phone_number: "+919876543210",
+      slot_date: "27-10-2026",
+      slot_time: "10:00 AM",
+      location: "Hyderabad",
+    },
+    { db: mockDb as any, env: VALID_CAL_ENV, fetchFn: mock500Fetch }
+  );
+  assert.equal(book500.status, "error");
+  assert.equal(book500.booking_status, "failed");
+  assert.match(book500.message, /HTTP 500/i);
 });
 
 // Scenario 8: Double booking or slot becoming unavailable between lookup and booking
@@ -756,6 +894,25 @@ test("13. verifyToolAuthorization enforces security and tenant isolation", async
   assert.equal(r7.authorized, false);
   if (!r7.authorized) {
     assert.equal(r7.status, 401);
+  }
+
+  // 13h. Diagnostic logs do not print secret values or sensitive tokens
+  const loggedWarns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: any[]) => loggedWarns.push(args.join(" "));
+  try {
+    await verifyToolAuthorization(
+      { "x-retell-secret": "secret-to-never-log-123" },
+      { agent_id: "agent-1" },
+      { env: { RETELL_TOOL_SECRET: "server-secret-never-log-456" } }
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(loggedWarns.length >= 1, true);
+  for (const log of loggedWarns) {
+    assert.equal(log.includes("secret-to-never-log-123"), false);
+    assert.equal(log.includes("server-secret-never-log-456"), false);
   }
 });
 

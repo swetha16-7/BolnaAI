@@ -292,6 +292,7 @@ export async function verifyToolAuthorization(
 
   // 1. A shared secret MUST be configured on the server. Reject all tool calls if secret is missing.
   if (!configuredSecret) {
+    console.warn("[Retell Tool Auth Diagnostic] status=401 reason=\"RETELL_TOOL_SECRET is not configured on server\"");
     return {
       authorized: false,
       status: 401,
@@ -320,6 +321,9 @@ export async function verifyToolAuthorization(
     getHeader("authorization")?.replace(/^Bearer\s+/i, "");
 
   if (!providedSecret || providedSecret !== configuredSecret) {
+    console.warn(
+      `[Retell Tool Auth Diagnostic] status=401 reason="Invalid or missing tool secret header" hasHeader=${Boolean(providedSecret)}`
+    );
     return { authorized: false, status: 401, error: "Unauthorized: Invalid or missing tool secret header." };
   }
 
@@ -374,10 +378,12 @@ export function extractCalcomSlots(
 ): string[] {
   if (!data || typeof data !== "object") return [];
   const slotsMap =
-    data.data && typeof data.data === "object" && !Array.isArray(data.data)
-      ? data.data
+    data.data?.slots && typeof data.data.slots === "object" && !Array.isArray(data.data.slots)
+      ? data.data.slots
       : data.slots && typeof data.slots === "object" && !Array.isArray(data.slots)
       ? data.slots
+      : data.data && typeof data.data === "object" && !Array.isArray(data.data)
+      ? data.data
       : typeof data === "object" && !Array.isArray(data)
       ? data
       : {};
@@ -451,8 +457,10 @@ export async function checkAvailability(
   const now = options.now ?? new Date();
 
   // Validate that the entire day is not in the past
-  const endOfDay = createDateInTimezone(parsedDate.year, parsedDate.month, parsedDate.day, 23, 59, timezone);
-  if (endOfDay.getTime() < now.getTime()) {
+  const startOfDay = createDateInTimezone(parsedDate.year, parsedDate.month, parsedDate.day, 0, 0, timezone);
+  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+
+  if (endOfDay.getTime() <= now.getTime()) {
     return {
       status: "unavailable",
       available_slots: [],
@@ -497,7 +505,6 @@ export async function checkAvailability(
   }
 
   const fetcher = options.calcomFetcher ?? options.fetchFn ?? fetch;
-  const startOfDay = createDateInTimezone(parsedDate.year, parsedDate.month, parsedDate.day, 0, 0, timezone);
   const startIso = startOfDay.toISOString();
   const endIso = endOfDay.toISOString();
 
@@ -507,7 +514,7 @@ export async function checkAvailability(
   const v2Url = `https://api.cal.com/v2/slots?eventTypeId=${encodeURIComponent(numericEventTypeId)}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&timeZone=${encodeURIComponent(timezone)}`;
 
   try {
-    let response = await fetcher(v2Url, {
+    const response = await fetcher(v2Url, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${calcomApiKey}`,
@@ -517,6 +524,9 @@ export async function checkAvailability(
     });
 
     if (response.status === 401) {
+      console.warn(
+        `[Cal.com Availability Diagnostic] upstream_status=401 eventTypeId=${numericEventTypeId} date=${preferred_date.trim()} tz=${timezone}`
+      );
       return {
         status: "error",
         available_slots: [],
@@ -526,38 +536,21 @@ export async function checkAvailability(
     }
 
     if (response.status === 404) {
-      // Fallback check: try v1 query format if v2 returned 404
-      const v1Url = `https://api.cal.com/v1/slots?apiKey=${encodeURIComponent(calcomApiKey)}&startTime=${encodeURIComponent(startIso)}&endTime=${encodeURIComponent(endIso)}&eventTypeId=${encodeURIComponent(numericEventTypeId)}`;
-      try {
-        const v1Response = await fetcher(v1Url);
-        if (v1Response.ok) {
-          response = v1Response;
-        } else if (v1Response.status === 401) {
-          return {
-            status: "error",
-            available_slots: [],
-            total_slots: 0,
-            message: "Cal.com authentication failed. Please verify CALCOM_API_KEY.",
-          };
-        } else {
-          return {
-            status: "error",
-            available_slots: [],
-            total_slots: 0,
-            message: `Cal.com event type '${numericEventTypeId}' was not found. Please verify CALCOM_EVENT_TYPE_ID.`,
-          };
-        }
-      } catch {
-        return {
-          status: "error",
-          available_slots: [],
-          total_slots: 0,
-          message: `Cal.com event type '${numericEventTypeId}' was not found. Please verify CALCOM_EVENT_TYPE_ID.`,
-        };
-      }
+      console.warn(
+        `[Cal.com Availability Diagnostic] upstream_status=404 eventTypeId=${numericEventTypeId} date=${preferred_date.trim()} tz=${timezone}`
+      );
+      return {
+        status: "error",
+        available_slots: [],
+        total_slots: 0,
+        message: `Cal.com event type '${numericEventTypeId}' was not found. Please verify CALCOM_EVENT_TYPE_ID.`,
+      };
     }
 
     if (response.status === 429) {
+      console.warn(
+        `[Cal.com Availability Diagnostic] upstream_status=429 eventTypeId=${numericEventTypeId} date=${preferred_date.trim()} tz=${timezone}`
+      );
       return {
         status: "error",
         available_slots: [],
@@ -567,6 +560,15 @@ export async function checkAvailability(
     }
 
     if (!response.ok) {
+      let errorDetail = "";
+      try {
+        const errJson = await response.clone().json();
+        if (errJson?.message) errorDetail = String(errJson.message).slice(0, 150);
+        else if (errJson?.error?.message) errorDetail = String(errJson.error.message).slice(0, 150);
+      } catch {}
+      console.warn(
+        `[Cal.com Availability Diagnostic] upstream_status=${response.status} eventTypeId=${numericEventTypeId} date=${preferred_date.trim()} tz=${timezone}${errorDetail ? ` detail="${errorDetail}"` : ""}`
+      );
       return {
         status: "error",
         available_slots: [],
@@ -598,6 +600,9 @@ export async function checkAvailability(
       message: `Slots are available on ${preferred_date.trim()}: ${allSlots.join(", ")}.`,
     };
   } catch (calcomError: any) {
+    console.error(
+      `[Cal.com Availability Error] eventTypeId=${numericEventTypeId} date=${preferred_date.trim()} tz=${timezone} error="${calcomError?.message || "Unknown error"}"`
+    );
     if (calcomError?.name === "AbortError" || /timeout/i.test(calcomError?.message)) {
       return {
         status: "error",
@@ -800,6 +805,9 @@ export async function bookAppointment(
     });
 
     if (response.status === 400) {
+      console.warn(
+        `[Cal.com Booking Diagnostic] upstream_status=400 eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone} reason="slot_unavailable"`
+      );
       return {
         status: "unavailable",
         booking_status: "failed",
@@ -808,6 +816,9 @@ export async function bookAppointment(
     }
 
     if (response.status === 401) {
+      console.warn(
+        `[Cal.com Booking Diagnostic] upstream_status=401 eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone}`
+      );
       return {
         status: "error",
         booking_status: "failed",
@@ -816,6 +827,9 @@ export async function bookAppointment(
     }
 
     if (response.status === 404) {
+      console.warn(
+        `[Cal.com Booking Diagnostic] upstream_status=404 eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone}`
+      );
       return {
         status: "error",
         booking_status: "failed",
@@ -824,6 +838,9 @@ export async function bookAppointment(
     }
 
     if (response.status === 429) {
+      console.warn(
+        `[Cal.com Booking Diagnostic] upstream_status=429 eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone}`
+      );
       return {
         status: "error",
         booking_status: "failed",
@@ -832,6 +849,15 @@ export async function bookAppointment(
     }
 
     if (!response.ok) {
+      let errorDetail = "";
+      try {
+        const errJson = await response.clone().json();
+        if (errJson?.message) errorDetail = String(errJson.message).slice(0, 150);
+        else if (errJson?.error?.message) errorDetail = String(errJson.error.message).slice(0, 150);
+      } catch {}
+      console.warn(
+        `[Cal.com Booking Diagnostic] upstream_status=${response.status} eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone}${errorDetail ? ` detail="${errorDetail}"` : ""}`
+      );
       return {
         status: "error",
         booking_status: "failed",
@@ -863,6 +889,9 @@ export async function bookAppointment(
       };
     }
   } catch (err: any) {
+    console.error(
+      `[Cal.com Booking Error] eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone} error="${err?.message || "Unknown error"}"`
+    );
     if (err?.name === "AbortError" || /timeout/i.test(err?.message)) {
       return {
         status: "error",
