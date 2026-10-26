@@ -55,6 +55,8 @@ export type BookAppointmentResult =
       booking_status: "confirmed";
       booking_id: string;
       booking_uid: string;
+      booking_reference?: string;
+      warning?: string;
       start_time: string;
       end_time: string;
       duration_minutes: number;
@@ -273,6 +275,7 @@ export type BookingServiceOptions = {
   env?: Record<string, string | undefined>;
   retellClient?: any;
   now?: Date;
+  organizationId?: string;
 };
 
 export type ToolAuthorizationResult =
@@ -287,6 +290,15 @@ export async function verifyToolAuthorization(
   const env = options.environment ?? options.env ?? process.env;
   const configuredSecret = env.RETELL_TOOL_SECRET?.trim() || env.RETELL_WEBHOOK_SECRET?.trim();
 
+  // 1. A shared secret MUST be configured on the server. Reject all tool calls if secret is missing.
+  if (!configuredSecret) {
+    return {
+      authorized: false,
+      status: 401,
+      error: "Unauthorized: RETELL_TOOL_SECRET is not configured on server. Custom tool requests must be authenticated with a configured secret.",
+    };
+  }
+
   const getHeader = (name: string): string | null => {
     if (headers && typeof (headers as any).get === "function") {
       return (headers as any).get(name) || (headers as any).get(name.toLowerCase());
@@ -300,24 +312,23 @@ export async function verifyToolAuthorization(
     return null;
   };
 
-  // 1. If a tool secret is configured, require a valid matching secret header
-  if (configuredSecret) {
-    const providedSecret =
-      getHeader("x-retell-secret") ||
-      getHeader("x-api-key") ||
-      getHeader("authorization")?.replace(/^Bearer\s+/i, "");
+  // 2. Validate that the request supplies the matching secret header.
+  // Body fields (agent_id, call_id, organizationId) are never trusted as proof of authentication.
+  const providedSecret =
+    getHeader("x-retell-secret") ||
+    getHeader("x-api-key") ||
+    getHeader("authorization")?.replace(/^Bearer\s+/i, "");
 
-    if (!providedSecret || providedSecret !== configuredSecret) {
-      return { authorized: false, status: 401, error: "Unauthorized: Invalid or missing tool secret header." };
-    }
-    return { authorized: true };
+  if (!providedSecret || providedSecret !== configuredSecret) {
+    return { authorized: false, status: 401, error: "Unauthorized: Invalid or missing tool secret header." };
   }
 
-  // 2. If no tool secret is set in environment, verify active Retell call authenticity
-  const retellAgentId = payload.agent_id || payload.call?.agent_id;
-  const callId = payload.call?.call_id;
+  // 3. Once secret header is verified, validate call and agent linkage for multi-tenant isolation
+  const retellAgentId = payload?.agent_id || payload?.call?.agent_id;
+  const callId = payload?.call?.call_id;
   const db = options.db ?? defaultPrisma;
 
+  // 3a. If call_id is supplied, verify authenticity with Retell API when retell client/key is available
   const retellApiKey = env.RETELL_API_KEY?.trim();
   if (callId && retellApiKey && retellApiKey !== "replace-with-retell-api-key") {
     try {
@@ -334,23 +345,81 @@ export async function verifyToolAuthorization(
     }
   }
 
-  // 3. Verify agent mapping in database if agent_id is provided
-  if (retellAgentId && db?.providerLink?.findFirst) {
-    try {
-      const link = await db.providerLink.findFirst({
-        where: { provider: "retell", providerId: retellAgentId },
-        include: { agent: true },
-      });
-      if (!link || !link.agent?.organizationId) {
-        return { authorized: false, status: 403, error: "Forbidden: Unrecognized or unlinked Retell agent." };
+  // 3b. If agent_id is supplied, verify it is mapped to an authorized organization in database
+  if (retellAgentId) {
+    if (db?.providerLink?.findFirst) {
+      try {
+        const link = await db.providerLink.findFirst({
+          where: { provider: "retell", providerId: retellAgentId },
+          include: { agent: true },
+        });
+        if (!link || !link.agent?.organizationId) {
+          return { authorized: false, status: 403, error: "Forbidden: Unrecognized or unlinked Retell agent." };
+        }
+        return { authorized: true, organizationId: link.agent.organizationId };
+      } catch {
+        return { authorized: false, status: 403, error: "Forbidden: Error validating Retell agent link." };
       }
-      return { authorized: true, organizationId: link.agent.organizationId };
-    } catch {
-      // ignore db errors
     }
   }
 
   return { authorized: true };
+}
+
+export function extractCalcomSlots(
+  data: any,
+  timezone: string,
+  now?: Date,
+  isToday = false,
+): string[] {
+  if (!data || typeof data !== "object") return [];
+  const slotsMap =
+    data.data && typeof data.data === "object" && !Array.isArray(data.data)
+      ? data.data
+      : data.slots && typeof data.slots === "object" && !Array.isArray(data.slots)
+      ? data.slots
+      : typeof data === "object" && !Array.isArray(data)
+      ? data
+      : {};
+
+  const allSlots: string[] = [];
+  const seen = new Set<string>();
+
+  for (const dayKey of Object.keys(slotsMap)) {
+    const daySlots = Array.isArray(slotsMap[dayKey]) ? slotsMap[dayKey] : [];
+    for (const item of daySlots) {
+      let isoStr: string | null = null;
+      if (typeof item === "string") {
+        isoStr = item;
+      } else if (item && typeof item === "object") {
+        isoStr = item.start || item.time || item.slot || null;
+      }
+
+      if (isoStr) {
+        const slotDate = new Date(isoStr);
+        if (!isNaN(slotDate.getTime())) {
+          if (isToday && now && slotDate.getTime() <= now.getTime()) {
+            continue;
+          }
+          const parts = new Intl.DateTimeFormat("en-US", {
+            timeZone: timezone,
+            hour: "numeric",
+            minute: "numeric",
+            hour12: false,
+          }).formatToParts(slotDate);
+          const hStr = parts.find((p) => p.type === "hour")?.value ?? "0";
+          const mStr = parts.find((p) => p.type === "minute")?.value ?? "0";
+          const formatted = formatTimeSlot(parseInt(hStr, 10), parseInt(mStr, 10));
+          if (!seen.has(formatted)) {
+            seen.add(formatted);
+            allSlots.push(formatted);
+          }
+        }
+      }
+    }
+  }
+
+  return allSlots;
 }
 
 export async function checkAvailability(
@@ -398,170 +467,152 @@ export async function checkAvailability(
   const calcomApiKey = env.CALCOM_API_KEY?.trim();
   const calcomEventTypeId = env.CALCOM_EVENT_TYPE_ID?.trim();
 
-  // If Cal.com is configured, query Cal.com slots
-  if (calcomApiKey && calcomApiKey !== "replace-with-cal-com-api-key" && !calcomApiKey.includes("replace-")) {
-    const fetcher = options.calcomFetcher ?? options.fetchFn ?? fetch;
-    const startIso = createDateInTimezone(parsedDate.year, parsedDate.month, parsedDate.day, 0, 0, timezone).toISOString();
-    const endIso = endOfDay.toISOString();
+  // Validate Cal.com runtime configuration
+  if (!calcomApiKey || calcomApiKey === "replace-with-cal-com-api-key" || calcomApiKey.includes("replace-")) {
+    return {
+      status: "error",
+      available_slots: [],
+      total_slots: 0,
+      message: "Scheduling provider is not configured. Missing or invalid CALCOM_API_KEY.",
+    };
+  }
 
-    try {
-      const url = `https://api.cal.com/v1/slots?apiKey=${encodeURIComponent(calcomApiKey)}&startTime=${encodeURIComponent(startIso)}&endTime=${encodeURIComponent(endIso)}${calcomEventTypeId ? `&eventTypeId=${encodeURIComponent(calcomEventTypeId)}` : ""}`;
-      const response = await fetcher(url);
-      if (!response.ok) {
-        return {
-          status: "error",
-          available_slots: [],
-          total_slots: 0,
-          message: `Booking provider returned an error (HTTP ${response.status}).`,
-        };
-      }
-      const data = await response.json();
-      const slotsData = (data && typeof data === "object" && "slots" in data) ? (data.slots as Record<string, Array<{ time: string }>>) : {};
-      const allSlots: string[] = [];
-      for (const dayKey of Object.keys(slotsData)) {
-        for (const slot of slotsData[dayKey] || []) {
-          const slotDate = new Date(slot.time);
-          if (!isNaN(slotDate.getTime())) {
-            const parts = new Intl.DateTimeFormat("en-US", {
-              timeZone: timezone,
-              hour: "numeric",
-              minute: "numeric",
-              hour12: false,
-            }).formatToParts(slotDate);
-            const hStr = parts.find((p) => p.type === "hour")?.value ?? "0";
-            const mStr = parts.find((p) => p.type === "minute")?.value ?? "0";
-            allSlots.push(formatTimeSlot(parseInt(hStr, 10), parseInt(mStr, 10)));
-          }
-        }
-      }
+  if (!calcomEventTypeId) {
+    return {
+      status: "error",
+      available_slots: [],
+      total_slots: 0,
+      message: "Scheduling provider is not configured. Missing CALCOM_EVENT_TYPE_ID.",
+    };
+  }
 
-      if (allSlots.length === 0) {
-        return {
-          status: "unavailable",
-          available_slots: [],
-          total_slots: 0,
-          date: preferred_date.trim(),
-          timezone,
-          message: `No available slots on ${preferred_date.trim()}. Please suggest an alternative date.`,
-        };
-      }
+  const numericEventTypeId = parseInt(calcomEventTypeId, 10);
+  if (isNaN(numericEventTypeId) || numericEventTypeId <= 0) {
+    return {
+      status: "error",
+      available_slots: [],
+      total_slots: 0,
+      message: `Invalid CALCOM_EVENT_TYPE_ID: '${calcomEventTypeId}' is not a valid numeric event type ID.`,
+    };
+  }
 
-      return {
-        status: "available",
-        available_slots: allSlots,
-        total_slots: allSlots.length,
-        date: preferred_date.trim(),
-        timezone,
-        message: `Slots are available on ${preferred_date.trim()}: ${allSlots.join(", ")}.`,
-      };
-    } catch (calcomError: any) {
+  const fetcher = options.calcomFetcher ?? options.fetchFn ?? fetch;
+  const startOfDay = createDateInTimezone(parsedDate.year, parsedDate.month, parsedDate.day, 0, 0, timezone);
+  const startIso = startOfDay.toISOString();
+  const endIso = endOfDay.toISOString();
+
+  const isToday = now.getTime() >= startOfDay.getTime() && now.getTime() <= endOfDay.getTime();
+
+  // Primary: Cal.com API v2 slots query
+  const v2Url = `https://api.cal.com/v2/slots?eventTypeId=${encodeURIComponent(numericEventTypeId)}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&timeZone=${encodeURIComponent(timezone)}`;
+
+  try {
+    let response = await fetcher(v2Url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${calcomApiKey}`,
+        "cal-api-version": "2024-08-13",
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (response.status === 401) {
       return {
         status: "error",
         available_slots: [],
         total_slots: 0,
-        message: `Booking provider error: ${calcomError?.message || "Connection refused"}.`,
+        message: "Cal.com authentication failed. Please verify CALCOM_API_KEY.",
       };
     }
-  }
 
-  // Built-in scheduling: query database for already booked appointments on this date
-  const db = options.db ?? defaultPrisma;
-  const startOfDay = createDateInTimezone(parsedDate.year, parsedDate.month, parsedDate.day, 0, 0, timezone);
-
-  let bookedSlotTimes: Set<string> = new Set();
-  try {
-    if (db?.appointment?.findMany) {
-      const retellAgentId = input.agent_id || input.call?.agent_id;
-      let organizationId: string | null = null;
-      if (retellAgentId && db?.providerLink?.findFirst) {
-        try {
-          const link = await db.providerLink.findFirst({
-            where: { provider: "retell", providerId: retellAgentId },
-            include: { agent: true },
-          });
-          if (link?.agent?.organizationId) {
-            organizationId = link.agent.organizationId;
-          }
-        } catch {
-          // ignore lookup error
+    if (response.status === 404) {
+      // Fallback check: try v1 query format if v2 returned 404
+      const v1Url = `https://api.cal.com/v1/slots?apiKey=${encodeURIComponent(calcomApiKey)}&startTime=${encodeURIComponent(startIso)}&endTime=${encodeURIComponent(endIso)}&eventTypeId=${encodeURIComponent(numericEventTypeId)}`;
+      try {
+        const v1Response = await fetcher(v1Url);
+        if (v1Response.ok) {
+          response = v1Response;
+        } else if (v1Response.status === 401) {
+          return {
+            status: "error",
+            available_slots: [],
+            total_slots: 0,
+            message: "Cal.com authentication failed. Please verify CALCOM_API_KEY.",
+          };
+        } else {
+          return {
+            status: "error",
+            available_slots: [],
+            total_slots: 0,
+            message: `Cal.com event type '${numericEventTypeId}' was not found. Please verify CALCOM_EVENT_TYPE_ID.`,
+          };
         }
-      }
-
-      const bookedAppointments = await db.appointment.findMany({
-        where: {
-          ...(organizationId ? { organizationId } : {}),
-          status: { in: ["confirmed", "pending"] },
-          startsAt: {
-            gte: startOfDay,
-            lte: endOfDay,
-          },
-        },
-        select: {
-          startsAt: true,
-        },
-      });
-
-      for (const appt of bookedAppointments) {
-        if (appt.startsAt) {
-          const apptDate = new Date(appt.startsAt);
-          const parts = new Intl.DateTimeFormat("en-US", {
-            timeZone: timezone,
-            hour: "numeric",
-            minute: "numeric",
-            hour12: false,
-          }).formatToParts(apptDate);
-          const hStr = parts.find((p) => p.type === "hour")?.value ?? "0";
-          const mStr = parts.find((p) => p.type === "minute")?.value ?? "0";
-          bookedSlotTimes.add(formatTimeSlot(parseInt(hStr, 10), parseInt(mStr, 10)));
-        }
+      } catch {
+        return {
+          status: "error",
+          available_slots: [],
+          total_slots: 0,
+          message: `Cal.com event type '${numericEventTypeId}' was not found. Please verify CALCOM_EVENT_TYPE_ID.`,
+        };
       }
     }
-  } catch (dbError: any) {
-    // If database is temporarily unavailable in non-mocked environment, log but handle safely
-    console.error("Database query error in checkAvailability:", dbError?.message);
-  }
 
-  // Filter candidate slots
-  const availableSlots = STANDARD_DAILY_SLOTS.filter((slot) => {
-    // Check if slot is already booked
-    if (bookedSlotTimes.has(slot)) return false;
-    // If date is today, filter out times that have already passed
-    const timeParts = parseTimeString(slot);
-    if (timeParts) {
-      const slotDateTime = createDateInTimezone(
-        parsedDate.year,
-        parsedDate.month,
-        parsedDate.day,
-        timeParts.hours,
-        timeParts.minutes,
+    if (response.status === 429) {
+      return {
+        status: "error",
+        available_slots: [],
+        total_slots: 0,
+        message: "Cal.com rate limit reached. Please try again shortly.",
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        status: "error",
+        available_slots: [],
+        total_slots: 0,
+        message: `Booking provider returned an error (HTTP ${response.status}).`,
+      };
+    }
+
+    const data = await response.json();
+    const allSlots = extractCalcomSlots(data, timezone, now, isToday);
+
+    if (allSlots.length === 0) {
+      return {
+        status: "unavailable",
+        available_slots: [],
+        total_slots: 0,
+        date: preferred_date.trim(),
         timezone,
-      );
-      if (slotDateTime.getTime() <= now.getTime()) {
-        return false;
-      }
+        message: `No available slots on ${preferred_date.trim()}. Please suggest an alternative date to the caller.`,
+      };
     }
-    return true;
-  });
 
-  if (availableSlots.length === 0) {
     return {
-      status: "unavailable",
-      available_slots: [],
-      total_slots: 0,
+      status: "available",
+      available_slots: allSlots,
+      total_slots: allSlots.length,
       date: preferred_date.trim(),
       timezone,
-      message: `No appointment slots are available on ${preferred_date.trim()}. Please suggest an alternative date to the caller.`,
+      message: `Slots are available on ${preferred_date.trim()}: ${allSlots.join(", ")}.`,
+    };
+  } catch (calcomError: any) {
+    if (calcomError?.name === "AbortError" || /timeout/i.test(calcomError?.message)) {
+      return {
+        status: "error",
+        available_slots: [],
+        total_slots: 0,
+        message: "Scheduling provider request timed out.",
+      };
+    }
+    return {
+      status: "error",
+      available_slots: [],
+      total_slots: 0,
+      message: `Booking provider error: ${calcomError?.message || "Connection refused"}.`,
     };
   }
-
-  return {
-    status: "available",
-    available_slots: [...availableSlots],
-    total_slots: availableSlots.length,
-    date: preferred_date.trim(),
-    timezone,
-    message: `Slots are available on ${preferred_date.trim()}: ${availableSlots.join(", ")}.`,
-  };
 }
 
 export async function bookAppointment(
@@ -640,71 +691,201 @@ export async function bookAppointment(
   const env = options.environment ?? options.env ?? process.env;
   const calcomApiKey = env.CALCOM_API_KEY?.trim();
   const calcomEventTypeId = env.CALCOM_EVENT_TYPE_ID?.trim();
-  let calcomBookingUid: string | null = null;
 
-  // If Cal.com is configured, call Cal.com booking API
-  if (calcomApiKey && calcomApiKey !== "replace-with-cal-com-api-key" && !calcomApiKey.includes("replace-")) {
-    const fetcher = options.calcomFetcher ?? options.fetchFn ?? fetch;
+  // Validate Cal.com runtime configuration
+  if (!calcomApiKey || calcomApiKey === "replace-with-cal-com-api-key" || calcomApiKey.includes("replace-")) {
+    return {
+      status: "error",
+      booking_status: "failed",
+      message: "Scheduling provider is not configured. Missing or invalid CALCOM_API_KEY.",
+    };
+  }
+
+  if (!calcomEventTypeId) {
+    return {
+      status: "error",
+      booking_status: "failed",
+      message: "Scheduling provider is not configured. Missing CALCOM_EVENT_TYPE_ID.",
+    };
+  }
+
+  const numericEventTypeId = parseInt(calcomEventTypeId, 10);
+  if (isNaN(numericEventTypeId) || numericEventTypeId <= 0) {
+    return {
+      status: "error",
+      booking_status: "failed",
+      message: `Invalid CALCOM_EVENT_TYPE_ID: '${calcomEventTypeId}' is not a valid numeric event type ID.`,
+    };
+  }
+
+  // Resolve organization and check local DB for duplicate/conflict before calling Cal.com
+  const db = options.db ?? defaultPrisma;
+  let organizationId: string | null = null;
+  const retellAgentId = input.agent_id || input.call?.agent_id;
+
+  if (retellAgentId && db?.providerLink?.findFirst) {
     try {
-      const response = await fetcher(`https://api.cal.com/v1/bookings?apiKey=${encodeURIComponent(calcomApiKey)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventTypeId: calcomEventTypeId ? parseInt(calcomEventTypeId, 10) : undefined,
-          start: startsAt.toISOString(),
-          end: endsAt.toISOString(),
-          name: name.trim(),
-          email: email?.trim() || `${phone_number.replace(/\D/g, "")}@customer.bolna.ai`,
-          timeZone: timezone,
-          metadata: {
-            phone: phone_number.trim(),
-            location: location?.trim() || "Hyderabad",
-            propertyType: property_type?.trim() || "Property",
-          },
-        }),
+      const link = await db.providerLink.findFirst({
+        where: { provider: "retell", providerId: retellAgentId },
+        include: { agent: true },
       });
+      if (link?.agent?.organizationId) {
+        organizationId = link.agent.organizationId;
+      }
+    } catch {}
+  }
 
-      if (!response.ok) {
+  if (!organizationId && db?.organization?.findFirst) {
+    try {
+      const defaultOrg = await db.organization.findFirst({
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      });
+      organizationId = defaultOrg?.id ?? null;
+    } catch {}
+  }
+
+  if (organizationId && db?.appointment?.findFirst) {
+    try {
+      const existingAppt = await db.appointment.findFirst({
+        where: {
+          organizationId,
+          status: { in: ["confirmed", "pending"] },
+          startsAt,
+        },
+      });
+      if (existingAppt) {
         return {
-          status: "error",
+          status: "unavailable",
           booking_status: "failed",
-          message: `Booking provider returned an error (HTTP ${response.status}). Booking could not be confirmed.`,
+          message: `The slot at ${slot_time} on ${slot_date} is already booked. Please choose another time.`,
         };
       }
+    } catch {}
+  }
 
-      const calcomData = await response.json();
-      calcomBookingUid = calcomData?.booking?.uid ?? calcomData?.id ?? null;
-    } catch (calcomError: any) {
+  // Call Cal.com booking API v2
+  const fetcher = options.calcomFetcher ?? options.fetchFn ?? fetch;
+  let calcomBookingUid: string | null = null;
+  let meetingUrl = "";
+
+  const attendeeEmail = email?.trim() || `${phone_number.replace(/\D/g, "")}@customer.bolna.ai`;
+  const bookingBody = {
+    eventTypeId: numericEventTypeId,
+    start: startsAt.toISOString(),
+    attendee: {
+      name: name.trim(),
+      email: attendeeEmail,
+      timeZone: timezone,
+      phoneNumber: phone_number.trim(),
+      language: "en",
+    },
+    metadata: {
+      phoneNumber: phone_number.trim(),
+      location: location?.trim() || "Hyderabad",
+      propertyType: property_type?.trim() || "Property",
+      appointmentType: appointment_type?.trim() || "Property Viewing",
+    },
+  };
+
+  try {
+    let response = await fetcher("https://api.cal.com/v2/bookings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${calcomApiKey}`,
+        "cal-api-version": "2024-08-13",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(bookingBody),
+    });
+
+    if (response.status === 400) {
+      return {
+        status: "unavailable",
+        booking_status: "failed",
+        message: "The requested time slot is unavailable or has already been booked on Cal.com. Please choose another slot.",
+      };
+    }
+
+    if (response.status === 401) {
       return {
         status: "error",
         booking_status: "failed",
-        message: `Booking provider error: ${calcomError?.message || "Failed to connect to Cal.com"}.`,
+        message: "Cal.com authentication failed. Please check CALCOM_API_KEY.",
       };
     }
+
+    if (response.status === 404) {
+      return {
+        status: "error",
+        booking_status: "failed",
+        message: `Cal.com event type '${numericEventTypeId}' was not found. Please check CALCOM_EVENT_TYPE_ID.`,
+      };
+    }
+
+    if (response.status === 429) {
+      return {
+        status: "error",
+        booking_status: "failed",
+        message: "Cal.com rate limit reached. Please try again shortly.",
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        status: "error",
+        booking_status: "failed",
+        message: `Booking provider returned an error (HTTP ${response.status}). Booking could not be confirmed.`,
+      };
+    }
+
+    const calcomData = await response.json();
+    calcomBookingUid =
+      calcomData?.data?.uid ||
+      calcomData?.data?.id ||
+      calcomData?.booking?.uid ||
+      calcomData?.booking?.id ||
+      calcomData?.uid ||
+      calcomData?.id ||
+      null;
+
+    meetingUrl =
+      calcomData?.data?.meetingUrl ||
+      calcomData?.data?.location ||
+      calcomData?.booking?.location ||
+      "";
+
+    if (!calcomBookingUid) {
+      return {
+        status: "error",
+        booking_status: "failed",
+        message: "Cal.com response was missing a valid booking confirmation identifier.",
+      };
+    }
+  } catch (err: any) {
+    if (err?.name === "AbortError" || /timeout/i.test(err?.message)) {
+      return {
+        status: "error",
+        booking_status: "failed",
+        message: "Scheduling provider request timed out.",
+      };
+    }
+    return {
+      status: "error",
+      booking_status: "failed",
+      message: `Booking provider error: ${err?.message || "Failed to connect to Cal.com"}.`,
+    };
   }
 
-  // Persist to database
-  const db = options.db ?? defaultPrisma;
-  let bookingId = `book_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  // Persist confirmed Cal.com booking to database
+  let bookingId = String(calcomBookingUid);
+  const endFormatted = formatTimeSlot((parsedTime.hours + 1) % 24, parsedTime.minutes);
   const title = `${name.trim()} - ${appointment_type || "Property Viewing"} (${property_type || "Property"}) in ${location || "Hyderabad"}`;
 
+  let dbWarning: string | undefined;
   try {
     if (db?.$transaction) {
-      const persisted = await db.$transaction(async (tx: any) => {
-        // Find organization (via Retell agent link, or default organization)
-        let organizationId: string | null = null;
-        const retellAgentId = input.agent_id || input.call?.agent_id;
-
-        if (retellAgentId) {
-          const providerLink = await tx.providerLink.findFirst({
-            where: { provider: "retell", providerId: retellAgentId },
-            include: { agent: true },
-          });
-          if (providerLink?.agent?.organizationId) {
-            organizationId = providerLink.agent.organizationId;
-          }
-        }
-
+      await db.$transaction(async (tx: any) => {
         if (!organizationId) {
           const defaultOrg = await tx.organization.findFirst({
             orderBy: { createdAt: "asc" },
@@ -715,19 +896,6 @@ export async function bookAppointment(
 
         if (!organizationId) {
           throw new Error("No organization found to assign appointment.");
-        }
-
-        // Check for conflicting appointment
-        const conflicting = await tx.appointment.findFirst({
-          where: {
-            organizationId,
-            status: { in: ["confirmed", "pending"] },
-            startsAt,
-          },
-        });
-
-        if (conflicting) {
-          return { conflict: true };
         }
 
         // Find or create Contact
@@ -773,13 +941,14 @@ export async function bookAppointment(
           data: {
             organizationId,
             contactId: contact.id,
+            agentId: retellAgentId ?? null,
             status: "confirmed",
             startsAt,
             endsAt,
             timezone,
             serviceName: title,
-            provider: calcomApiKey ? "calcom" : "bolna_internal",
-            calcomEventId: calcomBookingUid,
+            provider: "calcom",
+            calcomEventId: String(calcomBookingUid),
             metadata: {
               customerName: name.trim(),
               phoneNumber: rawPhone,
@@ -789,45 +958,48 @@ export async function bookAppointment(
               location,
               slotDate: slot_date,
               slotTime: slot_time,
+              calcomBookingUid: String(calcomBookingUid),
             },
           },
         });
 
-        return { conflict: false, appointmentId: appt.id };
+        bookingId = appt.id;
+
+        await tx.auditLog.create({
+          data: {
+            organizationId,
+            entity: "appointment",
+            action: "create_booking",
+            details: {
+              appointmentId: appt.id,
+              calcomBookingUid: String(calcomBookingUid),
+              customerName: name.trim(),
+              phoneNumber: rawPhone,
+              startsAt: startsAt.toISOString(),
+              serviceName: title,
+            },
+          },
+        });
       });
-
-      if (persisted.conflict) {
-        return {
-          status: "unavailable",
-          booking_status: "failed",
-          message: `The slot at ${slot_time} on ${slot_date} is already booked. Please choose another time.`,
-        };
-      }
-
-      bookingId = persisted.appointmentId;
     }
   } catch (dbError: any) {
-    console.error("Database persistence error in bookAppointment:", dbError?.message);
-    return {
-      status: "error",
-      booking_status: "failed",
-      message: "Database error while confirming appointment.",
-    };
+    console.error("Database persistence error after Cal.com confirmed booking:", dbError?.message);
+    dbWarning = "Appointment confirmed on calendar, but encountered a database recording issue.";
   }
-
-  const endFormatted = formatTimeSlot((parsedTime.hours + 1) % 24, parsedTime.minutes);
 
   return {
     status: "confirmed",
     booking_status: "confirmed",
     booking_id: bookingId,
-    booking_uid: calcomBookingUid ?? bookingId,
+    booking_uid: String(calcomBookingUid),
+    booking_reference: String(calcomBookingUid),
+    ...(dbWarning ? { warning: dbWarning } : {}),
     start_time: slot_time.trim(),
     end_time: endFormatted,
     duration_minutes: 60,
     title,
     location: location?.trim() || "Hyderabad",
-    meeting_url: "",
+    meeting_url: meetingUrl,
     message: `Your ${appointment_type || "viewing"} has been successfully booked for ${slot_date.trim()} at ${slot_time.trim()} in ${location?.trim() || "Hyderabad"}.`,
   };
 }
@@ -851,10 +1023,10 @@ export async function takeMessage(
   try {
     if (db?.$transaction) {
       await db.$transaction(async (tx: any) => {
-        let organizationId: string | null = null;
+        let organizationId: string | null = options.organizationId ?? null;
         const retellAgentId = input.agent_id || input.call?.agent_id;
 
-        if (retellAgentId) {
+        if (!organizationId && retellAgentId) {
           const providerLink = await tx.providerLink.findFirst({
             where: { provider: "retell", providerId: retellAgentId },
             include: { agent: true },

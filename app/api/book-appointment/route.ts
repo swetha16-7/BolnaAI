@@ -30,7 +30,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await bookAppointment(payload);
+    const result = await bookAppointment(payload, {
+      organizationId: auth.organizationId,
+    });
     return NextResponse.json(result, { status: 200 });
   } catch (error: any) {
     console.error("Book appointment API error:", error?.message);

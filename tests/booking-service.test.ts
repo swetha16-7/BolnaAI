@@ -16,12 +16,18 @@ import {
   type TakeMessageInput,
 } from "../lib/server/booking/service.ts";
 
+const VALID_CAL_ENV = {
+  CALCOM_API_KEY: "cal_live_test_api_key_12345",
+  CALCOM_EVENT_TYPE_ID: "123456",
+};
+
 // Helper to mock Prisma transactions and operations
 function createMockDb(overrides: {
   appointments?: any[];
   contacts?: any[];
   organization?: any;
   providerLink?: any;
+  transactionFail?: boolean;
 } = {}) {
   const appointments: any[] = [...(overrides.appointments ?? [])];
   const contacts: any[] = [...(overrides.contacts ?? [])];
@@ -53,6 +59,9 @@ function createMockDb(overrides: {
       findFirst: async (args: any) => {
         return appointments.find((a) => {
           if (args?.where?.startsAt && a.startsAt.getTime() === args.where.startsAt.getTime()) {
+            if (args?.where?.organizationId && a.organizationId !== args.where.organizationId) {
+              return false;
+            }
             return true;
           }
           return false;
@@ -97,12 +106,21 @@ function createMockDb(overrides: {
 
   const mockDb = {
     ...tx,
-    $transaction: async (cb: any) => cb(tx),
+    $transaction: async (cb: any) => {
+      if (overrides.transactionFail) {
+        throw new Error("Simulated database connection failure during transaction");
+      }
+      return cb(tx);
+    },
     _state: { appointments, contacts, auditLogs },
   };
 
   return mockDb;
 }
+
+// ==========================================
+// Basic Parsing & Utility Unit Tests
+// ==========================================
 
 test("parseDateString parses DD-MM-YYYY and YYYY-MM-DD accurately", () => {
   const d1 = parseDateString("28-10-2026");
@@ -146,9 +164,35 @@ test("resolveLocationTimezone maps locations to appropriate IANA timezones", () 
   assert.equal(resolveLocationTimezone(null, "Europe/Paris"), "Europe/Paris");
 });
 
-test("checkAvailability succeeds and returns available slots for a future date", async () => {
+// ==========================================
+// 13 Required Cal.com Test Scenarios
+// ==========================================
+
+// Scenario 1: Successful availability lookup
+test("1. Successful availability lookup through Cal.com API v2", async () => {
   const mockDb = createMockDb();
-  const simulatedNow = new Date("2026-10-26T06:00:00.000Z"); // Oct 26 2026, 11:30 AM IST
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  const mockCalFetch: typeof fetch = async (url, init) => {
+    assert.match(String(url), /https:\/\/api\.cal\.com\/v2\/slots/);
+    assert.match(String(url), /eventTypeId=123456/);
+    const auth = (init?.headers as any)?.Authorization || (init?.headers as any)?.authorization;
+    assert.equal(auth, `Bearer ${VALID_CAL_ENV.CALCOM_API_KEY}`);
+
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: {
+          "2026-10-28": [
+            { start: "2026-10-28T04:30:00.000Z" }, // 10:00 AM IST
+            { start: "2026-10-28T06:30:00.000Z" }, // 12:00 PM IST
+            { start: "2026-10-28T09:30:00.000Z" }, // 3:00 PM IST
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
 
   const result = await checkAvailability(
     {
@@ -156,97 +200,36 @@ test("checkAvailability succeeds and returns available slots for a future date",
       location: "Hyderabad",
       appointment_type: "property viewing",
     },
-    { db: mockDb as any, now: simulatedNow }
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockCalFetch,
+    }
   );
 
   assert.equal(result.status, "available");
-  assert.equal(result.total_slots > 0, true);
+  assert.equal(result.total_slots, 3);
   assert.equal(result.available_slots.includes("10:00 AM"), true);
   assert.equal(result.timezone, "Asia/Kolkata");
+  assert.match(result.message, /Slots are available/i);
 });
 
-test("checkAvailability returns unavailable when all slots are taken", async () => {
-  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
-  const tz = "Asia/Kolkata";
-  const preferredDate = "28-10-2026";
-  const parsedDate = parseDateString(preferredDate)!;
-
-  // Fill all slots
-  const standardSlots = [
-    { hours: 9, minutes: 0 },
-    { hours: 10, minutes: 0 },
-    { hours: 11, minutes: 0 },
-    { hours: 12, minutes: 0 },
-    { hours: 14, minutes: 0 },
-    { hours: 15, minutes: 0 },
-    { hours: 16, minutes: 0 },
-    { hours: 17, minutes: 0 },
-  ];
-
-  const fullAppointments = standardSlots.map((slot, index) => ({
-    id: `appt-${index}`,
-    organizationId: "org-test-1",
-    startsAt: createDateInTimezone(parsedDate, slot, tz),
-    status: "confirmed",
-  }));
-
-  const mockDb = createMockDb({ appointments: fullAppointments });
-
-  const result = await checkAvailability(
-    {
-      preferred_date: preferredDate,
-      location: "Hyderabad",
-    },
-    { db: mockDb as any, now: simulatedNow }
-  );
-
-  assert.equal(result.status, "unavailable");
-  assert.equal(result.total_slots, 0);
-  assert.equal(result.available_slots.length, 0);
-  assert.match(result.message, /No.*slots are available/i);
-});
-
-test("checkAvailability returns unavailable with friendly message for past dates", async () => {
-  const simulatedNow = new Date("2026-10-26T06:00:00.000Z"); // Oct 26 2026
-  const mockDb = createMockDb();
-
-  const result = await checkAvailability(
-    {
-      preferred_date: "20-10-2026", // past date
-      location: "Hyderabad",
-    },
-    { db: mockDb as any, now: simulatedNow }
-  );
-
-  assert.equal(result.status, "unavailable");
-  assert.equal(result.total_slots, 0);
-  assert.match(result.message, /in the past/i);
-});
-
-test("checkAvailability handles invalid date format gracefully", async () => {
-  const mockDb = createMockDb();
-
-  const result = await checkAvailability(
-    {
-      preferred_date: "not-a-real-date",
-      location: "Hyderabad",
-    },
-    { db: mockDb as any }
-  );
-
-  assert.equal(result.status, "error");
-  assert.match(result.message, /Invalid date format/i);
-});
-
-test("checkAvailability handles Cal.com provider error without throwing", async () => {
+// Scenario 2: No available slots
+test("2. No available slots returned from Cal.com", async () => {
   const mockDb = createMockDb();
   const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
 
-  const mockCalFetch: typeof fetch = async () => {
-    return new Response(JSON.stringify({ message: "Cal.com API key expired" }), {
-      status: 401,
-      statusText: "Unauthorized",
-    });
+  const mockEmptyCalFetch: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: {
+          "2026-10-28": [],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
   };
 
   const result = await checkAvailability(
@@ -257,26 +240,49 @@ test("checkAvailability handles Cal.com provider error without throwing", async 
     {
       db: mockDb as any,
       now: simulatedNow,
-      env: { CALCOM_API_KEY: "invalid-cal-key", CALCOM_EVENT_TYPE_ID: "123" },
-      fetchFn: mockCalFetch,
+      env: VALID_CAL_ENV,
+      fetchFn: mockEmptyCalFetch,
     }
   );
 
-  assert.equal(result.status, "error");
+  assert.equal(result.status, "unavailable");
   assert.equal(result.total_slots, 0);
-  assert.match(result.message, /Booking provider returned an error/i);
+  assert.equal(result.available_slots.length, 0);
+  assert.match(result.message, /No available slots/i);
 });
 
-test("bookAppointment succeeds and creates appointment and contact records", async () => {
+// Scenario 3: Successful booking
+test("3. Successful booking through Cal.com API v2 with DB persistence", async () => {
   const mockDb = createMockDb();
   const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  const mockBookingFetch: typeof fetch = async (url, init) => {
+    assert.match(String(url), /https:\/\/api\.cal\.com\/v2\/bookings/);
+    const body = JSON.parse(init?.body as string);
+    assert.equal(body.eventTypeId, 123456);
+    assert.equal(body.attendee.name, "Rajesh Kumar");
+    assert.equal(body.attendee.email, "rajesh@example.com");
+    assert.equal(body.attendee.phoneNumber, "+919876543210");
+
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: {
+          uid: "cal_booking_uid_98765",
+          title: "Property Viewing with Rajesh Kumar",
+          start: "2026-10-28T04:30:00.000Z",
+          duration: 60,
+        },
+      }),
+      { status: 201, headers: { "Content-Type": "application/json" } }
+    );
+  };
 
   const input: BookAppointmentInput = {
     name: "Rajesh Kumar",
     phone_number: "+919876543210",
     email: "rajesh@example.com",
-    appointment_type: "site visit",
-    property_type: "3BHK Luxury",
+    appointment_type: "property viewing",
     location: "Hyderabad",
     slot_date: "28-10-2026",
     slot_time: "10:00 AM",
@@ -285,107 +291,174 @@ test("bookAppointment succeeds and creates appointment and contact records", asy
   const result = await bookAppointment(input, {
     db: mockDb as any,
     now: simulatedNow,
+    env: VALID_CAL_ENV,
+    fetchFn: mockBookingFetch,
   });
 
   assert.equal(result.status, "confirmed");
   assert.equal(result.booking_status, "confirmed");
-  assert.equal(result.duration_minutes, 60);
-  assert.match(result.title, /Rajesh Kumar/);
+  assert.equal(result.booking_reference, "cal_booking_uid_98765");
   assert.match(result.message, /successfully booked/i);
 
-  // Check persisted state in mock database
+  // Verify persistence in local database with calcomEventId
+  const appointments = mockDb._state.appointments;
+  assert.equal(appointments.length, 1);
+  assert.equal(appointments[0].calcomEventId, "cal_booking_uid_98765");
+  assert.equal(appointments[0].provider, "calcom");
+  assert.equal(appointments[0].status, "confirmed");
+
   const contacts = mockDb._state.contacts;
   assert.equal(contacts.length, 1);
   assert.equal(contacts[0].phone, "+919876543210");
   assert.equal(contacts[0].firstName, "Rajesh");
-
-  const appointments = mockDb._state.appointments;
-  assert.equal(appointments.length, 1);
-  assert.equal(appointments[0].status, "confirmed");
-  assert.equal(appointments[0].contactId, contacts[0].id);
 });
 
-test("bookAppointment fails when slot is already booked without falsely reporting success", async () => {
+// Scenario 4: Cal.com authentication failure (401)
+test("4. Cal.com authentication failure returns clear error and does not report success", async () => {
+  const mockDb = createMockDb();
   const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
-  const tz = "Asia/Kolkata";
-  const slotDate = "28-10-2026";
-  const slotTime = "10:00 AM";
 
-  const parsedDate = parseDateString(slotDate)!;
-  const parsedTime = parseTimeString(slotTime)!;
-  const startsAt = createDateInTimezone(parsedDate, parsedTime, tz);
-
-  // Existing conflicting appointment
-  const mockDb = createMockDb({
-    appointments: [
-      {
-        id: "existing-appt-1",
-        organizationId: "org-test-1",
-        startsAt,
-        status: "confirmed",
-      },
-    ],
-  });
-
-  const input: BookAppointmentInput = {
-    name: "Pooja Reddy",
-    phone_number: "+919123456789",
-    appointment_type: "consultation",
-    location: "Hyderabad",
-    slot_date: slotDate,
-    slot_time: slotTime,
+  const mock401Fetch: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({ error: { message: "Invalid API key" } }),
+      { status: 401, headers: { "Content-Type": "application/json" } }
+    );
   };
 
-  const result = await bookAppointment(input, {
-    db: mockDb as any,
-    now: simulatedNow,
-  });
+  const availResult = await checkAvailability(
+    { preferred_date: "28-10-2026", location: "Hyderabad" },
+    { db: mockDb as any, now: simulatedNow, env: VALID_CAL_ENV, fetchFn: mock401Fetch }
+  );
+  assert.equal(availResult.status, "error");
+  assert.match(availResult.message, /Cal\.com authentication failed/i);
 
-  assert.equal(result.status, "unavailable");
-  assert.equal(result.booking_status, "failed");
-  assert.match(result.message, /already booked/i);
-  // Ensure no new appointment was created
-  assert.equal(mockDb._state.appointments.length, 1);
-});
-
-test("bookAppointment validates missing required fields", async () => {
-  const mockDb = createMockDb();
-
-  const resultMissingPhone = await bookAppointment(
+  const bookResult = await bookAppointment(
     {
-      name: "Test User",
+      name: "Suresh",
+      phone_number: "+919876543210",
       slot_date: "28-10-2026",
       slot_time: "10:00 AM",
+      location: "Hyderabad",
     },
-    { db: mockDb as any }
+    { db: mockDb as any, now: simulatedNow, env: VALID_CAL_ENV, fetchFn: mock401Fetch }
   );
-
-  assert.equal(resultMissingPhone.status, "error");
-  assert.equal(resultMissingPhone.booking_status, "failed");
-  assert.match(resultMissingPhone.message, /phone number is required/i);
-
-  const resultMissingDate = await bookAppointment(
-    {
-      name: "Test User",
-      phone_number: "+919876543210",
-      slot_time: "10:00 AM",
-    },
-    { db: mockDb as any }
-  );
-
-  assert.equal(resultMissingDate.status, "error");
-  assert.equal(resultMissingDate.booking_status, "failed");
-  assert.match(resultMissingDate.message, /slot date is required/i);
+  assert.equal(bookResult.status, "error");
+  assert.equal(bookResult.booking_status, "failed");
+  assert.match(bookResult.message, /Cal\.com authentication failed/i);
+  assert.equal(mockDb._state.appointments.length, 0);
 });
 
-test("bookAppointment handles Cal.com booking failure safely without reporting success", async () => {
+// Scenario 5: Missing API key or event type ID
+test("5. Missing API key or event type ID returns actionable error without silent fallback", async () => {
+  const mockDb = createMockDb();
+
+  // Test missing CALCOM_API_KEY
+  const availResult1 = await checkAvailability(
+    { preferred_date: "28-10-2026", location: "Hyderabad" },
+    { db: mockDb as any, env: { CALCOM_EVENT_TYPE_ID: "123456" } }
+  );
+  assert.equal(availResult1.status, "error");
+  assert.match(availResult1.message, /CALCOM_API_KEY/i);
+
+  // Test missing CALCOM_EVENT_TYPE_ID
+  const availResult2 = await checkAvailability(
+    { preferred_date: "28-10-2026", location: "Hyderabad" },
+    { db: mockDb as any, env: { CALCOM_API_KEY: "cal_123" } }
+  );
+  assert.equal(availResult2.status, "error");
+  assert.match(availResult2.message, /CALCOM_EVENT_TYPE_ID/i);
+
+  // Booking missing CALCOM_API_KEY
+  const bookResult = await bookAppointment(
+    {
+      name: "Test",
+      phone_number: "+919876543210",
+      slot_date: "28-10-2026",
+      slot_time: "10:00 AM",
+      location: "Hyderabad",
+    },
+    { db: mockDb as any, env: {} }
+  );
+  assert.equal(bookResult.status, "error");
+  assert.equal(bookResult.booking_status, "failed");
+  assert.match(bookResult.message, /CALCOM_API_KEY/i);
+});
+
+// Scenario 6: Invalid event type ID (non-numeric or 404)
+test("6. Invalid event type ID returns clear error", async () => {
+  const mockDb = createMockDb();
+
+  // Non-numeric event type ID
+  const availNonNumeric = await checkAvailability(
+    { preferred_date: "28-10-2026", location: "Hyderabad" },
+    { db: mockDb as any, env: { CALCOM_API_KEY: "cal_key", CALCOM_EVENT_TYPE_ID: "not-a-number" } }
+  );
+  assert.equal(availNonNumeric.status, "error");
+  assert.match(availNonNumeric.message, /valid numeric event type ID/i);
+
+  // Cal.com returns 404 (Event type not found)
+  const mock404Fetch: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({ error: { message: "Event type not found" } }),
+      { status: 404, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  const avail404 = await checkAvailability(
+    { preferred_date: "28-10-2026", location: "Hyderabad" },
+    { db: mockDb as any, env: VALID_CAL_ENV, fetchFn: mock404Fetch }
+  );
+  assert.equal(avail404.status, "error");
+  assert.match(avail404.message, /event type.*was not found/i);
+});
+
+// Scenario 7: Provider timeout or rate limit
+test("7. Cal.com rate limit (429) and timeout handled gracefully", async () => {
+  const mockDb = createMockDb();
+
+  // 429 Rate Limit
+  const mock429Fetch: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({ message: "Rate limit exceeded" }),
+      { status: 429, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  const avail429 = await checkAvailability(
+    { preferred_date: "28-10-2026", location: "Hyderabad" },
+    { db: mockDb as any, env: VALID_CAL_ENV, fetchFn: mock429Fetch }
+  );
+  assert.equal(avail429.status, "error");
+  assert.match(avail429.message, /rate limit reached/i);
+
+  // Provider Timeout (AbortError)
+  const mockTimeoutFetch: typeof fetch = async () => {
+    const error = new Error("The operation was aborted due to timeout");
+    error.name = "AbortError";
+    throw error;
+  };
+
+  const availTimeout = await checkAvailability(
+    { preferred_date: "28-10-2026", location: "Hyderabad" },
+    { db: mockDb as any, env: VALID_CAL_ENV, fetchFn: mockTimeoutFetch }
+  );
+  assert.equal(availTimeout.status, "error");
+  assert.match(availTimeout.message, /timed out/i);
+});
+
+// Scenario 8: Double booking or slot becoming unavailable between lookup and booking
+test("8. Cal.com 400 slot unavailable error marks booking as unavailable", async () => {
   const mockDb = createMockDb();
   const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
 
-  const mockFailingCalFetch: typeof fetch = async () => {
-    return new Response(JSON.stringify({ message: "Time slot unavailable on Cal.com" }), {
-      status: 400,
-    });
+  const mockSlotTakenFetch: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        error: { message: "Selected time slot is no longer available" },
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
   };
 
   const input: BookAppointmentInput = {
@@ -399,30 +472,169 @@ test("bookAppointment handles Cal.com booking failure safely without reporting s
   const result = await bookAppointment(input, {
     db: mockDb as any,
     now: simulatedNow,
-    env: { CALCOM_API_KEY: "cal_test_key", CALCOM_EVENT_TYPE_ID: "456" },
-    fetchFn: mockFailingCalFetch,
+    env: VALID_CAL_ENV,
+    fetchFn: mockSlotTakenFetch,
   });
 
-  assert.equal(result.status, "error");
+  assert.equal(result.status, "unavailable");
   assert.equal(result.booking_status, "failed");
-  assert.match(result.message, /Booking provider returned an error/i);
-  // Database appointment must NOT be created on provider failure
+  assert.match(result.message, /slot.*unavailable/i);
   assert.equal(mockDb._state.appointments.length, 0);
 });
 
-test("extractToolPayload correctly extracts top-level and nested args from Retell request", () => {
+// Scenario 9: Invalid dates, timezones, and attendee information
+test("9. Validates invalid dates, timezones, and attendee information", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  // Invalid date format
+  const r1 = await checkAvailability(
+    { preferred_date: "not-a-date" },
+    { db: mockDb as any, env: VALID_CAL_ENV }
+  );
+  assert.equal(r1.status, "error");
+  assert.match(r1.message, /Invalid date format/i);
+
+  // Past date
+  const r2 = await checkAvailability(
+    { preferred_date: "20-10-2026" },
+    { db: mockDb as any, now: simulatedNow, env: VALID_CAL_ENV }
+  );
+  assert.equal(r2.status, "unavailable");
+  assert.match(r2.message, /in the past/i);
+
+  // Missing phone number in booking
+  const r3 = await bookAppointment(
+    { name: "John", slot_date: "28-10-2026", slot_time: "10:00 AM" },
+    { db: mockDb as any, env: VALID_CAL_ENV }
+  );
+  assert.equal(r3.status, "error");
+  assert.match(r3.message, /phone number is required/i);
+
+  // Invalid email format in booking
+  const r4 = await bookAppointment(
+    {
+      name: "John",
+      phone_number: "+919876543210",
+      email: "not-an-email-address",
+      slot_date: "28-10-2026",
+      slot_time: "10:00 AM",
+    },
+    { db: mockDb as any, env: VALID_CAL_ENV }
+  );
+  assert.equal(r4.status, "error");
+  assert.match(r4.message, /invalid/i);
+});
+
+// Scenario 10: Database persistence failure after Cal.com booking succeeds
+test("10. Handles DB persistence failure after Cal.com confirms booking without losing reference", async () => {
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+  // create mock DB that throws inside $transaction
+  const mockFailingDb = createMockDb({ transactionFail: true });
+
+  const mockBookingFetch: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: {
+          uid: "cal_booking_confirmed_123",
+          title: "Site Visit with Rahul",
+          start: "2026-10-28T04:30:00.000Z",
+          duration: 60,
+        },
+      }),
+      { status: 201, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  const input: BookAppointmentInput = {
+    name: "Rahul",
+    phone_number: "+919876543210",
+    slot_date: "28-10-2026",
+    slot_time: "10:00 AM",
+    location: "Hyderabad",
+  };
+
+  const result = await bookAppointment(input, {
+    db: mockFailingDb as any,
+    now: simulatedNow,
+    env: VALID_CAL_ENV,
+    fetchFn: mockBookingFetch,
+  });
+
+  // Must still return confirmed because Cal.com booked it!
+  assert.equal(result.status, "confirmed");
+  assert.equal(result.booking_status, "confirmed");
+  assert.equal(result.booking_reference, "cal_booking_confirmed_123");
+  assert.match(result.message, /successfully booked/i);
+  assert.notEqual(result.warning, undefined);
+  assert.match(result.warning!, /database recording issue/i);
+});
+
+// Scenario 11: Duplicate booking requests and idempotency
+test("11. Rejects duplicate booking requests for the same slot time", async () => {
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+  const tz = "Asia/Kolkata";
+  const slotDate = "28-10-2026";
+  const slotTime = "10:00 AM";
+
+  const parsedDate = parseDateString(slotDate)!;
+  const parsedTime = parseTimeString(slotTime)!;
+  const startsAt = createDateInTimezone(parsedDate, parsedTime, tz);
+
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "existing-appt-1",
+        organizationId: "org-test-1",
+        startsAt,
+        status: "confirmed",
+      },
+    ],
+  });
+
+  let calComCalled = false;
+  const mockFetch: typeof fetch = async () => {
+    calComCalled = true;
+    return new Response(JSON.stringify({ status: "success" }), { status: 200 });
+  };
+
+  const input: BookAppointmentInput = {
+    name: "Pooja Reddy",
+    phone_number: "+919123456789",
+    slot_date: slotDate,
+    slot_time: slotTime,
+    location: "Hyderabad",
+  };
+
+  const result = await bookAppointment(input, {
+    db: mockDb as any,
+    now: simulatedNow,
+    env: VALID_CAL_ENV,
+    fetchFn: mockFetch,
+  });
+
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.booking_status, "failed");
+  assert.match(result.message, /already booked/i);
+  // Provider should not be called when local DB conflict is detected
+  assert.equal(calComCalled, false);
+});
+
+// Scenario 12: Retell tool argument mapping and structured responses
+test("12. Retell tool argument mapping extracts direct and nested arguments", () => {
   // Case 1: Direct arguments
-  const payload1 = extractToolPayload({
+  const p1 = extractToolPayload({
     preferred_date: "28-10-2026",
     location: "Hyderabad",
     call: { call_id: "c1", agent_id: "a1" },
   });
-  assert.equal(payload1.preferred_date, "28-10-2026");
-  assert.equal(payload1.location, "Hyderabad");
-  assert.equal(payload1.call?.call_id, "c1");
+  assert.equal(p1.preferred_date, "28-10-2026");
+  assert.equal(p1.location, "Hyderabad");
+  assert.equal(p1.call?.call_id, "c1");
 
-  // Case 2: Nested inside args
-  const payload2 = extractToolPayload({
+  // Case 2: Nested under args
+  const p2 = extractToolPayload({
     args: {
       slot_date: "28-10-2026",
       slot_time: "10:00 AM",
@@ -430,15 +642,126 @@ test("extractToolPayload correctly extracts top-level and nested args from Retel
     },
     call: { call_id: "c2", agent_id: "a2" },
   });
-  assert.equal(payload2.slot_date, "28-10-2026");
-  assert.equal(payload2.slot_time, "10:00 AM");
-  assert.equal(payload2.name, "Suresh");
-  assert.equal(payload2.call?.call_id, "c2");
+  assert.equal(p2.slot_date, "28-10-2026");
+  assert.equal(p2.slot_time, "10:00 AM");
+  assert.equal(p2.name, "Suresh");
+  assert.equal(p2.call?.call_id, "c2");
 
   // Case 3: Empty / malformed body
-  const payload3 = extractToolPayload(null);
-  assert.deepEqual(payload3, {});
+  const p3 = extractToolPayload(null);
+  assert.deepEqual(p3, {});
 });
+
+// Scenario 13: Organization isolation and unauthorized requests
+test("13. verifyToolAuthorization enforces security and tenant isolation", async () => {
+  const envWithSecret = {
+    RETELL_TOOL_SECRET: "secret-super-key-123",
+    RETELL_API_KEY: "retell-key-123",
+  };
+
+  // 13a. Reject request when RETELL_TOOL_SECRET is not configured on server
+  const r1 = await verifyToolAuthorization(
+    { "x-retell-secret": "secret-super-key-123" },
+    { agent_id: "agent-1" },
+    { env: {} }
+  );
+  assert.equal(r1.authorized, false);
+  if (!r1.authorized) {
+    assert.equal(r1.status, 401);
+    assert.match(r1.error, /RETELL_TOOL_SECRET is not configured/i);
+  }
+
+  // 13b. Reject request when request is missing the secret header
+  const r2 = await verifyToolAuthorization(
+    {},
+    { agent_id: "agent-1" },
+    { env: envWithSecret }
+  );
+  assert.equal(r2.authorized, false);
+  if (!r2.authorized) {
+    assert.equal(r2.status, 401);
+    assert.match(r2.error, /Invalid or missing tool secret header/i);
+  }
+
+  // 13c. Reject request with incorrect secret header
+  const r3 = await verifyToolAuthorization(
+    { "x-retell-secret": "wrong-attacker-secret" },
+    { agent_id: "agent-1" },
+    { env: envWithSecret }
+  );
+  assert.equal(r3.authorized, false);
+  if (!r3.authorized) {
+    assert.equal(r3.status, 401);
+    assert.match(r3.error, /Invalid or missing tool secret header/i);
+  }
+
+  // 13d. Reject request with valid secret but spoofed/fabricated call_id
+  const mockRetellClient = { call: { retrieve: async () => null } };
+  const r4 = await verifyToolAuthorization(
+    { "x-retell-secret": "secret-super-key-123" },
+    { agent_id: "agent-legit", call: { call_id: "fake-call-999", agent_id: "agent-legit" } },
+    { env: envWithSecret, retellClient: mockRetellClient }
+  );
+  assert.equal(r4.authorized, false);
+  if (!r4.authorized) {
+    assert.equal(r4.status, 403);
+    assert.match(r4.error, /Call ID not found in Retell/i);
+  }
+
+  // 13e. Reject request with valid secret but unrecognized/unlinked agent_id in database
+  const mockUnlinkedDb = { providerLink: { findFirst: async () => null } };
+  const r5 = await verifyToolAuthorization(
+    { "x-retell-secret": "secret-super-key-123" },
+    { agent_id: "attacker-agent" },
+    { env: envWithSecret, db: mockUnlinkedDb as any }
+  );
+  assert.equal(r5.authorized, false);
+  if (!r5.authorized) {
+    assert.equal(r5.status, 403);
+    assert.match(r5.error, /Unrecognized or unlinked Retell agent/i);
+  }
+
+  // 13f. Accept request with valid secret header and verified agent link
+  const mockLinkedDb = {
+    providerLink: {
+      findFirst: async () => ({
+        id: "link-legit",
+        provider: "retell",
+        providerId: "agent-legit",
+        agent: { organizationId: "org-legit-456" },
+      }),
+    },
+  };
+  const r6 = await verifyToolAuthorization(
+    { "x-retell-secret": "secret-super-key-123" },
+    { agent_id: "agent-legit" },
+    { env: envWithSecret, db: mockLinkedDb as any }
+  );
+  assert.equal(r6.authorized, true);
+  if (r6.authorized) {
+    assert.equal(r6.organizationId, "org-legit-456");
+  }
+
+  // 13g. Never treat untrusted body agent_id, call_id, or organizationId as proof of authentication
+  const r7 = await verifyToolAuthorization(
+    {},
+    {
+      agent_id: "agent-legit",
+      call: { call_id: "call-123", agent_id: "agent-legit" },
+      // Attacker trying to spoof organization
+      ...({ organizationId: "victim-org" } as any),
+    },
+    { env: envWithSecret }
+  );
+  assert.equal(r7.authorized, false);
+  if (!r7.authorized) {
+    assert.equal(r7.status, 401);
+  }
+});
+
+// ==========================================
+// Additional Tool Tests: takeMessage
+// ==========================================
 
 test("takeMessage records message and marks DNC if caller requested stop calling", async () => {
   const mockDb = createMockDb();
@@ -470,183 +793,3 @@ test("takeMessage records message and marks DNC if caller requested stop calling
   assert.equal(auditLogs[0].action, "record_dnc_message");
   assert.equal(auditLogs[0].details.isDnc, true);
 });
-
-test("bookAppointment rejects invalid email format safely", async () => {
-  const mockDb = createMockDb();
-
-  const result = await bookAppointment(
-    {
-      name: "Test User",
-      phone_number: "+919876543210",
-      email: "not-an-email",
-      slot_date: "28-10-2026",
-      slot_time: "10:00 AM",
-    },
-    { db: mockDb as any }
-  );
-
-  assert.equal(result.status, "error");
-  assert.equal(result.booking_status, "failed");
-  assert.match(result.message, /invalid/i);
-});
-
-test("checkAvailability respects tenant isolation between organizations", async () => {
-  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
-  const tz = "Asia/Kolkata";
-  const slotDate = "28-10-2026";
-  const parsedDate = parseDateString(slotDate)!;
-
-  // Fill all slots for Organization A
-  const standardSlots = [
-    { hours: 9, minutes: 0 },
-    { hours: 10, minutes: 0 },
-    { hours: 11, minutes: 0 },
-    { hours: 12, minutes: 0 },
-    { hours: 14, minutes: 0 },
-    { hours: 15, minutes: 0 },
-    { hours: 16, minutes: 0 },
-    { hours: 17, minutes: 0 },
-  ];
-
-  const orgAAppointments = standardSlots.map((slot, index) => ({
-    id: `appt-orgA-${index}`,
-    organizationId: "org-A",
-    startsAt: createDateInTimezone(parsedDate, slot, tz),
-    status: "confirmed",
-  }));
-
-  // Create mock DB with agent linked to Organization B
-  const mockDb = createMockDb({
-    appointments: orgAAppointments,
-    organization: { id: "org-B", name: "Org B" },
-    providerLink: {
-      id: "link-B",
-      provider: "retell",
-      providerId: "agent-org-B",
-      agent: { organizationId: "org-B" },
-    },
-  });
-
-  // When checking availability for Org B agent, Org A's appointments should NOT block Org B slots
-  const result = await checkAvailability(
-    {
-      preferred_date: slotDate,
-      location: "Hyderabad",
-      agent_id: "agent-org-B",
-    },
-    { db: mockDb as any, now: simulatedNow }
-  );
-
-  assert.equal(result.status, "available");
-  assert.equal(result.total_slots > 0, true);
-  assert.equal(result.available_slots.includes("10:00 AM"), true);
-});
-
-test("verifyToolAuthorization rejects request without secret when RETELL_TOOL_SECRET is configured", async () => {
-  const env = { RETELL_TOOL_SECRET: "secret-super-key-123" };
-  const headers = {};
-  const payload = { agent_id: "agent-1", call: null };
-
-  const result = await verifyToolAuthorization(headers, payload, { env });
-  assert.equal(result.authorized, false);
-  if (!result.authorized) {
-    assert.equal(result.status, 401);
-    assert.match(result.error, /Unauthorized/i);
-  }
-});
-
-test("verifyToolAuthorization accepts request with matching x-retell-secret header", async () => {
-  const env = { RETELL_TOOL_SECRET: "secret-super-key-123" };
-  const headers = { "x-retell-secret": "secret-super-key-123" };
-  const payload = { agent_id: "agent-1", call: null };
-
-  const result = await verifyToolAuthorization(headers, payload, { env });
-  assert.equal(result.authorized, true);
-});
-
-test("verifyToolAuthorization rejects spoofed call_id when Retell client reports call not found", async () => {
-  const env = { RETELL_API_KEY: "retell-key" };
-  const headers = {};
-  const payload = {
-    agent_id: "agent-legit",
-    call: { call_id: "fake-call-999", agent_id: "agent-legit" },
-  };
-
-  const mockRetellClient = {
-    call: {
-      retrieve: async () => null,
-    },
-  };
-
-  const result = await verifyToolAuthorization(headers, payload, {
-    env,
-    retellClient: mockRetellClient,
-  });
-
-  assert.equal(result.authorized, false);
-  if (!result.authorized) {
-    assert.equal(result.status, 403);
-    assert.match(result.error, /Call ID not found in Retell/i);
-  }
-});
-
-test("verifyToolAuthorization accepts legitimate active call verified by Retell client", async () => {
-  const env = { RETELL_API_KEY: "retell-key" };
-  const headers = {};
-  const payload = {
-    agent_id: "agent-legit",
-    call: { call_id: "call-live-123", agent_id: "agent-legit" },
-  };
-
-  const mockRetellClient = {
-    call: {
-      retrieve: async (id: string) => ({
-        call_id: id,
-        agent_id: "agent-legit",
-        call_status: "ongoing",
-      }),
-    },
-  };
-
-  const mockDb = createMockDb({
-    providerLink: {
-      id: "link-legit",
-      provider: "retell",
-      providerId: "agent-legit",
-      agent: { organizationId: "org-legit" },
-    },
-  });
-
-  const result = await verifyToolAuthorization(headers, payload, {
-    env,
-    retellClient: mockRetellClient,
-    db: mockDb as any,
-  });
-
-  assert.equal(result.authorized, true);
-});
-
-test("verifyToolAuthorization rejects unlinked agent_id in database", async () => {
-  const env = {};
-  const headers = {};
-  const payload = { agent_id: "agent-attacker-random" };
-
-  const mockDb = {
-    providerLink: {
-      findFirst: async () => null,
-    },
-  };
-
-  const result = await verifyToolAuthorization(headers, payload, {
-    env,
-    db: mockDb as any,
-  });
-
-  assert.equal(result.authorized, false);
-  if (!result.authorized) {
-    assert.equal(result.status, 403);
-    assert.match(result.error, /Unrecognized or unlinked Retell agent/i);
-  }
-});
-
-

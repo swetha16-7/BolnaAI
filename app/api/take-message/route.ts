@@ -29,7 +29,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await takeMessage(payload);
+    const result = await takeMessage(payload, {
+      organizationId: auth.organizationId,
+    });
     return NextResponse.json(result, { status: 200 });
   } catch (error: any) {
     console.error("Take message API error:", error?.message);
