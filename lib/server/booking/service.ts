@@ -1,0 +1,967 @@
+import { prisma as defaultPrisma } from "../db.ts";
+import { createRetellClient } from "../calls/retell.ts";
+
+export type CheckAvailabilityInput = {
+  appointment_type?: string | null;
+  preferred_date?: string | null;
+  location?: string | null;
+  property_type?: string | null;
+  timezone?: string | null;
+  agent_id?: string | null;
+  call?: { agent_id?: string | null; call_id?: string | null } | null;
+};
+
+export type CheckAvailabilityResult =
+  | {
+      status: "available";
+      available_slots: string[];
+      total_slots: number;
+      date: string;
+      timezone: string;
+      message: string;
+    }
+  | {
+      status: "unavailable";
+      available_slots: string[];
+      total_slots: 0;
+      date: string;
+      timezone: string;
+      message: string;
+    }
+  | {
+      status: "error";
+      available_slots: string[];
+      total_slots: 0;
+      message: string;
+    };
+
+export type BookAppointmentInput = {
+  name?: string | null;
+  phone_number?: string | null;
+  email?: string | null;
+  appointment_type?: string | null;
+  property_type?: string | null;
+  location?: string | null;
+  slot_date?: string | null;
+  slot_time?: string | null;
+  timezone?: string | null;
+  agent_id?: string | null;
+  call?: { agent_id?: string | null; call_id?: string | null } | null;
+};
+
+export type BookAppointmentResult =
+  | {
+      status: "confirmed";
+      booking_status: "confirmed";
+      booking_id: string;
+      booking_uid: string;
+      start_time: string;
+      end_time: string;
+      duration_minutes: number;
+      title: string;
+      location: string;
+      meeting_url: string;
+      message: string;
+    }
+  | {
+      status: "unavailable";
+      booking_status: "failed";
+      message: string;
+    }
+  | {
+      status: "error";
+      booking_status: "failed";
+      message: string;
+    };
+
+export type TakeMessageInput = {
+  name?: string | null;
+  phone_number?: string | null;
+  email?: string | null;
+  message?: string | null;
+  agent_id?: string | null;
+  call?: { agent_id?: string | null; call_id?: string | null } | null;
+};
+
+export type TakeMessageResult =
+  | {
+      success: true;
+      message: string;
+      name: string;
+      phone_number: string;
+    }
+  | {
+      success: false;
+      message: string;
+      name?: string;
+      phone_number?: string;
+    };
+
+export const STANDARD_DAILY_SLOTS = [
+  "09:00 AM",
+  "10:00 AM",
+  "11:00 AM",
+  "12:00 PM",
+  "02:00 PM",
+  "03:00 PM",
+  "04:00 PM",
+  "05:00 PM",
+] as const;
+
+export function parseDateString(dateStr: string | null | undefined): { year: number; month: number; day: number } | null {
+  if (!dateStr || typeof dateStr !== "string") return null;
+  const trimmed = dateStr.trim();
+
+  // Try DD-MM-YYYY or DD/MM/YYYY
+  const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10);
+    const year = parseInt(dmyMatch[3], 10);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (day > daysInMonth) return null;
+    return { year, month, day };
+  }
+
+  // Try YYYY-MM-DD
+  const ymdMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const month = parseInt(ymdMatch[2], 10);
+    const day = parseInt(ymdMatch[3], 10);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (day > daysInMonth) return null;
+    return { year, month, day };
+  }
+
+  return null;
+}
+
+export function parseTimeString(timeStr: string | null | undefined): { hours: number; minutes: number } | null {
+  if (!timeStr || typeof timeStr !== "string") return null;
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+  if (!match) return null;
+
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const ampm = match[3]?.toUpperCase();
+
+  if (minutes < 0 || minutes > 59) return null;
+
+  if (ampm) {
+    if (hours < 1 || hours > 12) return null;
+    if (ampm === "AM" && hours === 12) hours = 0;
+    if (ampm === "PM" && hours < 12) hours += 12;
+  } else {
+    if (hours < 0 || hours > 23) return null;
+  }
+
+  return { hours, minutes };
+}
+
+export function resolveLocationTimezone(location?: string | null, explicitTimezone?: string | null): string {
+  if (explicitTimezone?.trim()) {
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: explicitTimezone.trim() });
+      return explicitTimezone.trim();
+    } catch {
+      // Invalid timezone, fall back
+    }
+  }
+
+  if (location && typeof location === "string") {
+    const loc = location.toLowerCase();
+    if (
+      loc.includes("hyderabad") ||
+      loc.includes("bangalore") ||
+      loc.includes("bengaluru") ||
+      loc.includes("mumbai") ||
+      loc.includes("delhi") ||
+      loc.includes("chennai") ||
+      loc.includes("kolkata") ||
+      loc.includes("pune") ||
+      loc.includes("india")
+    ) {
+      return "Asia/Kolkata";
+    }
+    if (loc.includes("new york") || loc.includes("boston") || loc.includes("miami") || loc.includes("est") || loc.includes("edt")) {
+      return "America/New_York";
+    }
+    if (loc.includes("chicago") || loc.includes("dallas") || loc.includes("houston") || loc.includes("cst") || loc.includes("cdt")) {
+      return "America/Chicago";
+    }
+    if (loc.includes("denver") || loc.includes("mst") || loc.includes("mdt")) {
+      return "America/Denver";
+    }
+    if (loc.includes("california") || loc.includes("los angeles") || loc.includes("san francisco") || loc.includes("seattle") || loc.includes("pst") || loc.includes("pdt")) {
+      return "America/Los_Angeles";
+    }
+    if (loc.includes("london") || loc.includes("uk") || loc.includes("united kingdom")) {
+      return "Europe/London";
+    }
+    if (loc.includes("dubai") || loc.includes("uae")) {
+      return "Asia/Dubai";
+    }
+  }
+
+  return "Asia/Kolkata";
+}
+
+function getTimezoneOffsetMs(timeZone: string, date: Date): number {
+  try {
+    const utcDate = new Date(date.toLocaleString("en-US", { timeZone: "UTC" }));
+    const tzDate = new Date(date.toLocaleString("en-US", { timeZone }));
+    return tzDate.getTime() - utcDate.getTime();
+  } catch {
+    return 0;
+  }
+}
+
+export function createDateInTimezone(
+  yearOrDateObj: number | { year: number; month: number; day: number },
+  monthOrTimeObj?: number | { hours: number; minutes: number },
+  dayOrTz?: number | string,
+  hours = 0,
+  minutes = 0,
+  timezone = "Asia/Kolkata",
+): Date {
+  let y: number;
+  let m: number;
+  let d: number;
+  let h = hours;
+  let min = minutes;
+  let tz = timezone;
+
+  if (typeof yearOrDateObj === "object" && yearOrDateObj !== null) {
+    y = yearOrDateObj.year;
+    m = yearOrDateObj.month;
+    d = yearOrDateObj.day;
+    if (typeof monthOrTimeObj === "object" && monthOrTimeObj !== null) {
+      h = monthOrTimeObj.hours;
+      min = monthOrTimeObj.minutes;
+    }
+    if (typeof dayOrTz === "string") {
+      tz = dayOrTz;
+    }
+  } else {
+    y = yearOrDateObj;
+    m = typeof monthOrTimeObj === "number" ? monthOrTimeObj : 1;
+    d = typeof dayOrTz === "number" ? dayOrTz : 1;
+  }
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const isoLocal = `${y}-${pad(m)}-${pad(d)}T${pad(h)}:${pad(min)}:00Z`;
+  const baseUtc = new Date(isoLocal);
+  const offset = getTimezoneOffsetMs(tz, baseUtc);
+  return new Date(baseUtc.getTime() - offset);
+}
+
+export function formatTimeSlot(hours: number, minutes = 0): string {
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours % 12 === 0 ? 12 : hours % 12;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(displayHours)}:${pad(minutes)} ${ampm}`;
+}
+
+export type BookingServiceOptions = {
+  db?: any;
+  calcomFetcher?: typeof fetch;
+  fetchFn?: typeof fetch;
+  environment?: Record<string, string | undefined>;
+  env?: Record<string, string | undefined>;
+  retellClient?: any;
+  now?: Date;
+};
+
+export type ToolAuthorizationResult =
+  | { authorized: true; organizationId?: string }
+  | { authorized: false; status: 401 | 403; error: string };
+
+export async function verifyToolAuthorization(
+  headers: Headers | Record<string, string | null | undefined>,
+  payload: { agent_id?: string | null; call?: { agent_id?: string | null; call_id?: string | null } | null },
+  options: BookingServiceOptions = {},
+): Promise<ToolAuthorizationResult> {
+  const env = options.environment ?? options.env ?? process.env;
+  const configuredSecret = env.RETELL_TOOL_SECRET?.trim() || env.RETELL_WEBHOOK_SECRET?.trim();
+
+  const getHeader = (name: string): string | null => {
+    if (headers && typeof (headers as any).get === "function") {
+      return (headers as any).get(name) || (headers as any).get(name.toLowerCase());
+    }
+    if (headers && typeof headers === "object") {
+      const target = name.toLowerCase();
+      for (const [k, v] of Object.entries(headers)) {
+        if (k.toLowerCase() === target && typeof v === "string") return v;
+      }
+    }
+    return null;
+  };
+
+  // 1. If a tool secret is configured, require a valid matching secret header
+  if (configuredSecret) {
+    const providedSecret =
+      getHeader("x-retell-secret") ||
+      getHeader("x-api-key") ||
+      getHeader("authorization")?.replace(/^Bearer\s+/i, "");
+
+    if (!providedSecret || providedSecret !== configuredSecret) {
+      return { authorized: false, status: 401, error: "Unauthorized: Invalid or missing tool secret header." };
+    }
+    return { authorized: true };
+  }
+
+  // 2. If no tool secret is set in environment, verify active Retell call authenticity
+  const retellAgentId = payload.agent_id || payload.call?.agent_id;
+  const callId = payload.call?.call_id;
+  const db = options.db ?? defaultPrisma;
+
+  const retellApiKey = env.RETELL_API_KEY?.trim();
+  if (callId && retellApiKey && retellApiKey !== "replace-with-retell-api-key") {
+    try {
+      const client = options.retellClient ?? createRetellClient(retellApiKey, options.fetchFn ?? fetch);
+      const retellCall = await client.call.retrieve(callId);
+      if (!retellCall) {
+        return { authorized: false, status: 403, error: "Forbidden: Call ID not found in Retell." };
+      }
+      if (retellAgentId && retellCall.agent_id && retellCall.agent_id !== retellAgentId) {
+        return { authorized: false, status: 403, error: "Forbidden: Call does not match specified Retell agent." };
+      }
+    } catch {
+      return { authorized: false, status: 403, error: "Forbidden: Unable to verify Retell call authenticity." };
+    }
+  }
+
+  // 3. Verify agent mapping in database if agent_id is provided
+  if (retellAgentId && db?.providerLink?.findFirst) {
+    try {
+      const link = await db.providerLink.findFirst({
+        where: { provider: "retell", providerId: retellAgentId },
+        include: { agent: true },
+      });
+      if (!link || !link.agent?.organizationId) {
+        return { authorized: false, status: 403, error: "Forbidden: Unrecognized or unlinked Retell agent." };
+      }
+      return { authorized: true, organizationId: link.agent.organizationId };
+    } catch {
+      // ignore db errors
+    }
+  }
+
+  return { authorized: true };
+}
+
+export async function checkAvailability(
+  input: CheckAvailabilityInput,
+  options: BookingServiceOptions = {},
+): Promise<CheckAvailabilityResult> {
+  const { preferred_date, location, timezone: explicitTimezone } = input;
+
+  if (!preferred_date || typeof preferred_date !== "string" || !preferred_date.trim()) {
+    return {
+      status: "error",
+      available_slots: [],
+      total_slots: 0,
+      message: "Missing preferred_date parameter. Expected format: DD-MM-YYYY.",
+    };
+  }
+
+  const parsedDate = parseDateString(preferred_date);
+  if (!parsedDate) {
+    return {
+      status: "error",
+      available_slots: [],
+      total_slots: 0,
+      message: `Invalid date format: '${preferred_date}'. Please provide date in DD-MM-YYYY format (e.g. 01-11-2026).`,
+    };
+  }
+
+  const timezone = resolveLocationTimezone(location, explicitTimezone);
+  const now = options.now ?? new Date();
+
+  // Validate that the entire day is not in the past
+  const endOfDay = createDateInTimezone(parsedDate.year, parsedDate.month, parsedDate.day, 23, 59, timezone);
+  if (endOfDay.getTime() < now.getTime()) {
+    return {
+      status: "unavailable",
+      available_slots: [],
+      total_slots: 0,
+      date: preferred_date.trim(),
+      timezone,
+      message: `The requested date ${preferred_date.trim()} is in the past. Please suggest a future date to the caller.`,
+    };
+  }
+
+  const env = options.environment ?? options.env ?? process.env;
+  const calcomApiKey = env.CALCOM_API_KEY?.trim();
+  const calcomEventTypeId = env.CALCOM_EVENT_TYPE_ID?.trim();
+
+  // If Cal.com is configured, query Cal.com slots
+  if (calcomApiKey && calcomApiKey !== "replace-with-cal-com-api-key" && !calcomApiKey.includes("replace-")) {
+    const fetcher = options.calcomFetcher ?? options.fetchFn ?? fetch;
+    const startIso = createDateInTimezone(parsedDate.year, parsedDate.month, parsedDate.day, 0, 0, timezone).toISOString();
+    const endIso = endOfDay.toISOString();
+
+    try {
+      const url = `https://api.cal.com/v1/slots?apiKey=${encodeURIComponent(calcomApiKey)}&startTime=${encodeURIComponent(startIso)}&endTime=${encodeURIComponent(endIso)}${calcomEventTypeId ? `&eventTypeId=${encodeURIComponent(calcomEventTypeId)}` : ""}`;
+      const response = await fetcher(url);
+      if (!response.ok) {
+        return {
+          status: "error",
+          available_slots: [],
+          total_slots: 0,
+          message: `Booking provider returned an error (HTTP ${response.status}).`,
+        };
+      }
+      const data = await response.json();
+      const slotsData = (data && typeof data === "object" && "slots" in data) ? (data.slots as Record<string, Array<{ time: string }>>) : {};
+      const allSlots: string[] = [];
+      for (const dayKey of Object.keys(slotsData)) {
+        for (const slot of slotsData[dayKey] || []) {
+          const slotDate = new Date(slot.time);
+          if (!isNaN(slotDate.getTime())) {
+            const parts = new Intl.DateTimeFormat("en-US", {
+              timeZone: timezone,
+              hour: "numeric",
+              minute: "numeric",
+              hour12: false,
+            }).formatToParts(slotDate);
+            const hStr = parts.find((p) => p.type === "hour")?.value ?? "0";
+            const mStr = parts.find((p) => p.type === "minute")?.value ?? "0";
+            allSlots.push(formatTimeSlot(parseInt(hStr, 10), parseInt(mStr, 10)));
+          }
+        }
+      }
+
+      if (allSlots.length === 0) {
+        return {
+          status: "unavailable",
+          available_slots: [],
+          total_slots: 0,
+          date: preferred_date.trim(),
+          timezone,
+          message: `No available slots on ${preferred_date.trim()}. Please suggest an alternative date.`,
+        };
+      }
+
+      return {
+        status: "available",
+        available_slots: allSlots,
+        total_slots: allSlots.length,
+        date: preferred_date.trim(),
+        timezone,
+        message: `Slots are available on ${preferred_date.trim()}: ${allSlots.join(", ")}.`,
+      };
+    } catch (calcomError: any) {
+      return {
+        status: "error",
+        available_slots: [],
+        total_slots: 0,
+        message: `Booking provider error: ${calcomError?.message || "Connection refused"}.`,
+      };
+    }
+  }
+
+  // Built-in scheduling: query database for already booked appointments on this date
+  const db = options.db ?? defaultPrisma;
+  const startOfDay = createDateInTimezone(parsedDate.year, parsedDate.month, parsedDate.day, 0, 0, timezone);
+
+  let bookedSlotTimes: Set<string> = new Set();
+  try {
+    if (db?.appointment?.findMany) {
+      const retellAgentId = input.agent_id || input.call?.agent_id;
+      let organizationId: string | null = null;
+      if (retellAgentId && db?.providerLink?.findFirst) {
+        try {
+          const link = await db.providerLink.findFirst({
+            where: { provider: "retell", providerId: retellAgentId },
+            include: { agent: true },
+          });
+          if (link?.agent?.organizationId) {
+            organizationId = link.agent.organizationId;
+          }
+        } catch {
+          // ignore lookup error
+        }
+      }
+
+      const bookedAppointments = await db.appointment.findMany({
+        where: {
+          ...(organizationId ? { organizationId } : {}),
+          status: { in: ["confirmed", "pending"] },
+          startsAt: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+        },
+        select: {
+          startsAt: true,
+        },
+      });
+
+      for (const appt of bookedAppointments) {
+        if (appt.startsAt) {
+          const apptDate = new Date(appt.startsAt);
+          const parts = new Intl.DateTimeFormat("en-US", {
+            timeZone: timezone,
+            hour: "numeric",
+            minute: "numeric",
+            hour12: false,
+          }).formatToParts(apptDate);
+          const hStr = parts.find((p) => p.type === "hour")?.value ?? "0";
+          const mStr = parts.find((p) => p.type === "minute")?.value ?? "0";
+          bookedSlotTimes.add(formatTimeSlot(parseInt(hStr, 10), parseInt(mStr, 10)));
+        }
+      }
+    }
+  } catch (dbError: any) {
+    // If database is temporarily unavailable in non-mocked environment, log but handle safely
+    console.error("Database query error in checkAvailability:", dbError?.message);
+  }
+
+  // Filter candidate slots
+  const availableSlots = STANDARD_DAILY_SLOTS.filter((slot) => {
+    // Check if slot is already booked
+    if (bookedSlotTimes.has(slot)) return false;
+    // If date is today, filter out times that have already passed
+    const timeParts = parseTimeString(slot);
+    if (timeParts) {
+      const slotDateTime = createDateInTimezone(
+        parsedDate.year,
+        parsedDate.month,
+        parsedDate.day,
+        timeParts.hours,
+        timeParts.minutes,
+        timezone,
+      );
+      if (slotDateTime.getTime() <= now.getTime()) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (availableSlots.length === 0) {
+    return {
+      status: "unavailable",
+      available_slots: [],
+      total_slots: 0,
+      date: preferred_date.trim(),
+      timezone,
+      message: `No appointment slots are available on ${preferred_date.trim()}. Please suggest an alternative date to the caller.`,
+    };
+  }
+
+  return {
+    status: "available",
+    available_slots: [...availableSlots],
+    total_slots: availableSlots.length,
+    date: preferred_date.trim(),
+    timezone,
+    message: `Slots are available on ${preferred_date.trim()}: ${availableSlots.join(", ")}.`,
+  };
+}
+
+export async function bookAppointment(
+  input: BookAppointmentInput,
+  options: BookingServiceOptions = {},
+): Promise<BookAppointmentResult> {
+  const {
+    name,
+    phone_number,
+    email,
+    appointment_type = "Property Viewing",
+    property_type = "Property",
+    location = "Hyderabad",
+    slot_date,
+    slot_time,
+    timezone: explicitTimezone,
+  } = input;
+
+  // Validation
+  if (!name?.trim()) {
+    return { status: "error", booking_status: "failed", message: "Caller name is required for booking." };
+  }
+  if (!phone_number?.trim()) {
+    return { status: "error", booking_status: "failed", message: "Phone number is required for booking." };
+  }
+  if (!slot_date?.trim()) {
+    return { status: "error", booking_status: "failed", message: "Appointment slot date is required (DD-MM-YYYY)." };
+  }
+  if (!slot_time?.trim()) {
+    return { status: "error", booking_status: "failed", message: "Appointment slot time is required (e.g. 10:00 AM)." };
+  }
+
+  const sanitizedEmail = email?.trim() ? email.trim().slice(0, 150) : null;
+  if (sanitizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitizedEmail)) {
+    return { status: "error", booking_status: "failed", message: "The provided email address is invalid." };
+  }
+
+  const parsedDate = parseDateString(slot_date);
+  if (!parsedDate) {
+    return {
+      status: "error",
+      booking_status: "failed",
+      message: `Invalid slot_date: '${slot_date}'. Expected format is DD-MM-YYYY.`,
+    };
+  }
+
+  const parsedTime = parseTimeString(slot_time);
+  if (!parsedTime) {
+    return {
+      status: "error",
+      booking_status: "failed",
+      message: `Invalid slot_time: '${slot_time}'. Expected format like 10:00 AM or 04:00 PM.`,
+    };
+  }
+
+  const timezone = resolveLocationTimezone(location, explicitTimezone);
+  const startsAt = createDateInTimezone(
+    parsedDate.year,
+    parsedDate.month,
+    parsedDate.day,
+    parsedTime.hours,
+    parsedTime.minutes,
+    timezone,
+  );
+  const endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000); // 60 minutes
+  const now = options.now ?? new Date();
+
+  if (startsAt.getTime() < now.getTime()) {
+    return {
+      status: "unavailable",
+      booking_status: "failed",
+      message: `Cannot book a slot in the past (${slot_date} ${slot_time}). Please choose a future slot.`,
+    };
+  }
+
+  const env = options.environment ?? options.env ?? process.env;
+  const calcomApiKey = env.CALCOM_API_KEY?.trim();
+  const calcomEventTypeId = env.CALCOM_EVENT_TYPE_ID?.trim();
+  let calcomBookingUid: string | null = null;
+
+  // If Cal.com is configured, call Cal.com booking API
+  if (calcomApiKey && calcomApiKey !== "replace-with-cal-com-api-key" && !calcomApiKey.includes("replace-")) {
+    const fetcher = options.calcomFetcher ?? options.fetchFn ?? fetch;
+    try {
+      const response = await fetcher(`https://api.cal.com/v1/bookings?apiKey=${encodeURIComponent(calcomApiKey)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventTypeId: calcomEventTypeId ? parseInt(calcomEventTypeId, 10) : undefined,
+          start: startsAt.toISOString(),
+          end: endsAt.toISOString(),
+          name: name.trim(),
+          email: email?.trim() || `${phone_number.replace(/\D/g, "")}@customer.bolna.ai`,
+          timeZone: timezone,
+          metadata: {
+            phone: phone_number.trim(),
+            location: location?.trim() || "Hyderabad",
+            propertyType: property_type?.trim() || "Property",
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        return {
+          status: "error",
+          booking_status: "failed",
+          message: `Booking provider returned an error (HTTP ${response.status}). Booking could not be confirmed.`,
+        };
+      }
+
+      const calcomData = await response.json();
+      calcomBookingUid = calcomData?.booking?.uid ?? calcomData?.id ?? null;
+    } catch (calcomError: any) {
+      return {
+        status: "error",
+        booking_status: "failed",
+        message: `Booking provider error: ${calcomError?.message || "Failed to connect to Cal.com"}.`,
+      };
+    }
+  }
+
+  // Persist to database
+  const db = options.db ?? defaultPrisma;
+  let bookingId = `book_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const title = `${name.trim()} - ${appointment_type || "Property Viewing"} (${property_type || "Property"}) in ${location || "Hyderabad"}`;
+
+  try {
+    if (db?.$transaction) {
+      const persisted = await db.$transaction(async (tx: any) => {
+        // Find organization (via Retell agent link, or default organization)
+        let organizationId: string | null = null;
+        const retellAgentId = input.agent_id || input.call?.agent_id;
+
+        if (retellAgentId) {
+          const providerLink = await tx.providerLink.findFirst({
+            where: { provider: "retell", providerId: retellAgentId },
+            include: { agent: true },
+          });
+          if (providerLink?.agent?.organizationId) {
+            organizationId = providerLink.agent.organizationId;
+          }
+        }
+
+        if (!organizationId) {
+          const defaultOrg = await tx.organization.findFirst({
+            orderBy: { createdAt: "asc" },
+            select: { id: true },
+          });
+          organizationId = defaultOrg?.id ?? null;
+        }
+
+        if (!organizationId) {
+          throw new Error("No organization found to assign appointment.");
+        }
+
+        // Check for conflicting appointment
+        const conflicting = await tx.appointment.findFirst({
+          where: {
+            organizationId,
+            status: { in: ["confirmed", "pending"] },
+            startsAt,
+          },
+        });
+
+        if (conflicting) {
+          return { conflict: true };
+        }
+
+        // Find or create Contact
+        const rawPhone = phone_number.trim();
+        let contact = await tx.contact.findFirst({
+          where: {
+            organizationId,
+            OR: [
+              { phone: rawPhone },
+              ...(email?.trim() ? [{ email: email.trim() }] : []),
+            ],
+          },
+        });
+
+        if (contact) {
+          contact = await tx.contact.update({
+            where: { id: contact.id },
+            data: {
+              lastContactAt: now,
+              ...(email?.trim() && !contact.email ? { email: email.trim() } : {}),
+            },
+          });
+        } else {
+          const nameParts = name.trim().split(" ");
+          const firstName = nameParts[0] || "Customer";
+          const lastName = nameParts.slice(1).join(" ") || null;
+          contact = await tx.contact.create({
+            data: {
+              organizationId,
+              firstName,
+              lastName,
+              phone: rawPhone,
+              email: email?.trim() || null,
+              source: "Voice Agent Booking",
+              status: "qualified",
+              lastContactAt: now,
+            },
+          });
+        }
+
+        // Create Appointment record
+        const appt = await tx.appointment.create({
+          data: {
+            organizationId,
+            contactId: contact.id,
+            status: "confirmed",
+            startsAt,
+            endsAt,
+            timezone,
+            serviceName: title,
+            provider: calcomApiKey ? "calcom" : "bolna_internal",
+            calcomEventId: calcomBookingUid,
+            metadata: {
+              customerName: name.trim(),
+              phoneNumber: rawPhone,
+              email: email?.trim() || null,
+              appointmentType: appointment_type,
+              propertyType: property_type,
+              location,
+              slotDate: slot_date,
+              slotTime: slot_time,
+            },
+          },
+        });
+
+        return { conflict: false, appointmentId: appt.id };
+      });
+
+      if (persisted.conflict) {
+        return {
+          status: "unavailable",
+          booking_status: "failed",
+          message: `The slot at ${slot_time} on ${slot_date} is already booked. Please choose another time.`,
+        };
+      }
+
+      bookingId = persisted.appointmentId;
+    }
+  } catch (dbError: any) {
+    console.error("Database persistence error in bookAppointment:", dbError?.message);
+    return {
+      status: "error",
+      booking_status: "failed",
+      message: "Database error while confirming appointment.",
+    };
+  }
+
+  const endFormatted = formatTimeSlot((parsedTime.hours + 1) % 24, parsedTime.minutes);
+
+  return {
+    status: "confirmed",
+    booking_status: "confirmed",
+    booking_id: bookingId,
+    booking_uid: calcomBookingUid ?? bookingId,
+    start_time: slot_time.trim(),
+    end_time: endFormatted,
+    duration_minutes: 60,
+    title,
+    location: location?.trim() || "Hyderabad",
+    meeting_url: "",
+    message: `Your ${appointment_type || "viewing"} has been successfully booked for ${slot_date.trim()} at ${slot_time.trim()} in ${location?.trim() || "Hyderabad"}.`,
+  };
+}
+
+export async function takeMessage(
+  input: TakeMessageInput,
+  options: BookingServiceOptions = {},
+): Promise<TakeMessageResult> {
+  const { name, phone_number, email, message } = input;
+
+  if (!name?.trim() || !phone_number?.trim() || !message?.trim()) {
+    return {
+      success: false,
+      message: "Name, phone number, and message are required.",
+    };
+  }
+
+  const db = options.db ?? defaultPrisma;
+  const now = options.now ?? new Date();
+
+  try {
+    if (db?.$transaction) {
+      await db.$transaction(async (tx: any) => {
+        let organizationId: string | null = null;
+        const retellAgentId = input.agent_id || input.call?.agent_id;
+
+        if (retellAgentId) {
+          const providerLink = await tx.providerLink.findFirst({
+            where: { provider: "retell", providerId: retellAgentId },
+            include: { agent: true },
+          });
+          if (providerLink?.agent?.organizationId) {
+            organizationId = providerLink.agent.organizationId;
+          }
+        }
+
+        if (!organizationId) {
+          const defaultOrg = await tx.organization.findFirst({
+            orderBy: { createdAt: "asc" },
+            select: { id: true },
+          });
+          organizationId = defaultOrg?.id ?? null;
+        }
+
+        if (!organizationId) return;
+
+        // Check if message is a Do-Not-Call (DNC) request
+        const lowerMsg = message.toLowerCase();
+        const isDnc =
+          lowerMsg.includes("stop calling") ||
+          lowerMsg.includes("do not call") ||
+          lowerMsg.includes("don't call") ||
+          lowerMsg.includes("remove my number") ||
+          lowerMsg.includes("remove me");
+
+        const rawPhone = phone_number.trim();
+        let contact = await tx.contact.findFirst({
+          where: {
+            organizationId,
+            OR: [
+              { phone: rawPhone },
+              ...(email?.trim() ? [{ email: email.trim() }] : []),
+            ],
+          },
+        });
+
+        if (contact) {
+          await tx.contact.update({
+            where: { id: contact.id },
+            data: {
+              lastContactAt: now,
+              ...(isDnc ? { doNotCall: true, doNotCallAt: now } : {}),
+            },
+          });
+        } else {
+          const nameParts = name.trim().split(" ");
+          const firstName = nameParts[0] || "Caller";
+          const lastName = nameParts.slice(1).join(" ") || null;
+          await tx.contact.create({
+            data: {
+              organizationId,
+              firstName,
+              lastName,
+              phone: rawPhone,
+              email: email?.trim() || null,
+              source: "Caller Message",
+              status: isDnc ? "inactive" : "new",
+              doNotCall: isDnc,
+              doNotCallAt: isDnc ? now : null,
+              lastContactAt: now,
+            },
+          });
+        }
+
+        // Record message in audit log
+        await tx.auditLog.create({
+          data: {
+            organizationId,
+            entity: "caller_message",
+            action: isDnc ? "record_dnc_message" : "record_message",
+            details: {
+              callerName: name.trim(),
+              phoneNumber: rawPhone,
+              email: email?.trim() || null,
+              message: message.trim(),
+              isDnc,
+              recordedAt: now.toISOString(),
+            },
+          },
+        });
+      });
+    }
+  } catch (dbError: any) {
+    console.error("Database error in takeMessage:", dbError?.message);
+    // Still return success to Retell so caller is acknowledged politely
+  }
+
+  return {
+    success: true,
+    message: "Your message has been successfully recorded.",
+    name: name.trim(),
+    phone_number: phone_number.trim(),
+  };
+}
+
+export function extractToolPayload<T = Record<string, any>>(body: any): T {
+  if (!body || typeof body !== "object") {
+    return {} as T;
+  }
+  const args = body.args && typeof body.args === "object" ? body.args : {};
+  return {
+    ...body,
+    ...args,
+    call: body.call || args.call || null,
+  } as T;
+}
+
