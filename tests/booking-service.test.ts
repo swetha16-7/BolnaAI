@@ -97,6 +97,9 @@ function createMockDb(overrides: {
       },
     },
     auditLog: {
+      findFirst: async () => {
+        return auditLogs.length > 0 ? auditLogs[auditLogs.length - 1] : null;
+      },
       create: async ({ data }: any) => {
         auditLogs.push(data);
         return data;
@@ -454,11 +457,12 @@ test("4. Cal.com authentication failure returns clear error and does not report 
 // Scenario 5: Missing API key or event type ID
 test("5. Missing API key or event type ID returns actionable error without silent fallback", async () => {
   const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
 
   // Test missing CALCOM_API_KEY
   const availResult1 = await checkAvailability(
     { preferred_date: "28-10-2026", location: "Hyderabad" },
-    { db: mockDb as any, env: { CALCOM_EVENT_TYPE_ID: "123456" } }
+    { db: mockDb as any, now: simulatedNow, env: { CALCOM_EVENT_TYPE_ID: "123456" } }
   );
   assert.equal(availResult1.status, "error");
   assert.match(availResult1.message, /CALCOM_API_KEY/i);
@@ -466,7 +470,7 @@ test("5. Missing API key or event type ID returns actionable error without silen
   // Test missing CALCOM_EVENT_TYPE_ID
   const availResult2 = await checkAvailability(
     { preferred_date: "28-10-2026", location: "Hyderabad" },
-    { db: mockDb as any, env: { CALCOM_API_KEY: "cal_123" } }
+    { db: mockDb as any, now: simulatedNow, env: { CALCOM_API_KEY: "cal_123" } }
   );
   assert.equal(availResult2.status, "error");
   assert.match(availResult2.message, /CALCOM_EVENT_TYPE_ID/i);
@@ -480,7 +484,7 @@ test("5. Missing API key or event type ID returns actionable error without silen
       slot_time: "10:00 AM",
       location: "Hyderabad",
     },
-    { db: mockDb as any, env: {} }
+    { db: mockDb as any, now: simulatedNow, env: {} }
   );
   assert.equal(bookResult.status, "error");
   assert.equal(bookResult.booking_status, "failed");
@@ -490,11 +494,12 @@ test("5. Missing API key or event type ID returns actionable error without silen
 // Scenario 6: Invalid event type ID (non-numeric or 404)
 test("6. Invalid event type ID returns clear error", async () => {
   const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
 
   // Non-numeric event type ID
   const availNonNumeric = await checkAvailability(
     { preferred_date: "28-10-2026", location: "Hyderabad" },
-    { db: mockDb as any, env: { CALCOM_API_KEY: "cal_key", CALCOM_EVENT_TYPE_ID: "not-a-number" } }
+    { db: mockDb as any, now: simulatedNow, env: { CALCOM_API_KEY: "cal_key", CALCOM_EVENT_TYPE_ID: "not-a-number" } }
   );
   assert.equal(availNonNumeric.status, "error");
   assert.match(availNonNumeric.message, /valid numeric event type ID/i);
@@ -509,7 +514,7 @@ test("6. Invalid event type ID returns clear error", async () => {
 
   const avail404 = await checkAvailability(
     { preferred_date: "28-10-2026", location: "Hyderabad" },
-    { db: mockDb as any, env: VALID_CAL_ENV, fetchFn: mock404Fetch }
+    { db: mockDb as any, now: simulatedNow, env: VALID_CAL_ENV, fetchFn: mock404Fetch }
   );
   assert.equal(avail404.status, "error");
   assert.match(avail404.message, /event type.*was not found/i);
@@ -518,6 +523,7 @@ test("6. Invalid event type ID returns clear error", async () => {
 // Scenario 7: Provider timeout or rate limit
 test("7. Cal.com rate limit (429) and timeout handled gracefully", async () => {
   const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
 
   // 429 Rate Limit
   const mock429Fetch: typeof fetch = async () => {
@@ -529,7 +535,7 @@ test("7. Cal.com rate limit (429) and timeout handled gracefully", async () => {
 
   const avail429 = await checkAvailability(
     { preferred_date: "28-10-2026", location: "Hyderabad" },
-    { db: mockDb as any, env: VALID_CAL_ENV, fetchFn: mock429Fetch }
+    { db: mockDb as any, now: simulatedNow, env: VALID_CAL_ENV, fetchFn: mock429Fetch }
   );
   assert.equal(avail429.status, "error");
   assert.match(avail429.message, /rate limit reached/i);
@@ -543,7 +549,7 @@ test("7. Cal.com rate limit (429) and timeout handled gracefully", async () => {
 
   const availTimeout = await checkAvailability(
     { preferred_date: "28-10-2026", location: "Hyderabad" },
-    { db: mockDb as any, env: VALID_CAL_ENV, fetchFn: mockTimeoutFetch }
+    { db: mockDb as any, now: simulatedNow, env: VALID_CAL_ENV, fetchFn: mockTimeoutFetch }
   );
   assert.equal(availTimeout.status, "error");
   assert.match(availTimeout.message, /timed out/i);
@@ -552,6 +558,7 @@ test("7. Cal.com rate limit (429) and timeout handled gracefully", async () => {
 // Scenario 7b: Upstream Cal.com 500 server error
 test("7b. Cal.com upstream HTTP 500 error returns error status without fabricating slots", async () => {
   const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
 
   const mock500Fetch: typeof fetch = async () => {
     return new Response(
@@ -562,7 +569,7 @@ test("7b. Cal.com upstream HTTP 500 error returns error status without fabricati
 
   const avail500 = await checkAvailability(
     { preferred_date: "27-10-2026", location: "Hyderabad" },
-    { db: mockDb as any, env: VALID_CAL_ENV, fetchFn: mock500Fetch }
+    { db: mockDb as any, now: simulatedNow, env: VALID_CAL_ENV, fetchFn: mock500Fetch }
   );
   assert.equal(avail500.status, "error");
   assert.equal(avail500.available_slots.length, 0);
@@ -577,7 +584,7 @@ test("7b. Cal.com upstream HTTP 500 error returns error status without fabricati
       slot_time: "10:00 AM",
       location: "Hyderabad",
     },
-    { db: mockDb as any, env: VALID_CAL_ENV, fetchFn: mock500Fetch }
+    { db: mockDb as any, now: simulatedNow, env: VALID_CAL_ENV, fetchFn: mock500Fetch }
   );
   assert.equal(book500.status, "error");
   assert.equal(book500.booking_status, "failed");
@@ -949,4 +956,32 @@ test("takeMessage records message and marks DNC if caller requested stop calling
   assert.equal(auditLogs.length, 1);
   assert.equal(auditLogs[0].action, "record_dnc_message");
   assert.equal(auditLogs[0].details.isDnc, true);
+});
+
+test("takeMessage deduplicates identical messages received within 60 seconds", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  const msgInput: TakeMessageInput = {
+    name: "Pooja Sharma",
+    phone_number: "+919123456789",
+    message: "Please call me tomorrow at 4 PM.",
+  };
+
+  // First submission
+  const res1 = await takeMessage(msgInput, {
+    db: mockDb as any,
+    now: simulatedNow,
+  });
+  assert.equal(res1.success, true);
+  assert.equal(mockDb._state.auditLogs.length, 1);
+
+  // Immediate retry submission (e.g. within 10s)
+  const res2 = await takeMessage(msgInput, {
+    db: mockDb as any,
+    now: new Date(simulatedNow.getTime() + 10_000),
+  });
+  assert.equal(res2.success, true);
+  // Audit log count should NOT increase due to deduplication
+  assert.equal(mockDb._state.auditLogs.length, 1);
 });

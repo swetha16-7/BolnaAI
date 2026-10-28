@@ -1,9 +1,11 @@
+import crypto from "node:crypto";
 import { prisma as defaultPrisma } from "../db.ts";
 import { createRetellClient } from "../calls/retell.ts";
 
 export type CheckAvailabilityInput = {
   appointment_type?: string | null;
   preferred_date?: string | null;
+  date?: string | null;
   location?: string | null;
   property_type?: string | null;
   timezone?: string | null;
@@ -14,6 +16,7 @@ export type CheckAvailabilityInput = {
 export type CheckAvailabilityResult =
   | {
       status: "available";
+      statusCode?: number;
       available_slots: string[];
       total_slots: number;
       date: string;
@@ -22,6 +25,7 @@ export type CheckAvailabilityResult =
     }
   | {
       status: "unavailable";
+      statusCode?: number;
       available_slots: string[];
       total_slots: 0;
       date: string;
@@ -30,6 +34,7 @@ export type CheckAvailabilityResult =
     }
   | {
       status: "error";
+      statusCode?: number;
       available_slots: string[];
       total_slots: 0;
       message: string;
@@ -44,6 +49,8 @@ export type BookAppointmentInput = {
   location?: string | null;
   slot_date?: string | null;
   slot_time?: string | null;
+  date?: string | null;
+  time?: string | null;
   timezone?: string | null;
   agent_id?: string | null;
   call?: { agent_id?: string | null; call_id?: string | null } | null;
@@ -52,6 +59,7 @@ export type BookAppointmentInput = {
 export type BookAppointmentResult =
   | {
       status: "confirmed";
+      statusCode?: number;
       booking_status: "confirmed";
       booking_id: string;
       booking_uid: string;
@@ -67,11 +75,13 @@ export type BookAppointmentResult =
     }
   | {
       status: "unavailable";
+      statusCode?: number;
       booking_status: "failed";
       message: string;
     }
   | {
       status: "error";
+      statusCode?: number;
       booking_status: "failed";
       message: string;
     };
@@ -88,12 +98,14 @@ export type TakeMessageInput = {
 export type TakeMessageResult =
   | {
       success: true;
+      statusCode?: number;
       message: string;
       name: string;
       phone_number: string;
     }
   | {
       success: false;
+      statusCode?: number;
       message: string;
       name?: string;
       phone_number?: string;
@@ -110,9 +122,32 @@ export const STANDARD_DAILY_SLOTS = [
   "05:00 PM",
 ] as const;
 
-export function parseDateString(dateStr: string | null | undefined): { year: number; month: number; day: number } | null {
+export function timingSafeSecretEqual(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(a.trim());
+  const bufB = Buffer.from(b.trim());
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+export function parseDateString(
+  dateStr: string | null | undefined,
+  referenceNow?: Date,
+): { year: number; month: number; day: number } | null {
   if (!dateStr || typeof dateStr !== "string") return null;
   const trimmed = dateStr.trim();
+  const lower = trimmed.toLowerCase();
+
+  // Natural language relative dates
+  if (lower === "today" || lower === "now") {
+    const base = referenceNow ?? new Date();
+    return { year: base.getFullYear(), month: base.getMonth() + 1, day: base.getDate() };
+  }
+  if (lower === "tomorrow") {
+    const base = referenceNow ?? new Date();
+    const tom = new Date(base.getTime() + 24 * 60 * 60 * 1000);
+    return { year: tom.getFullYear(), month: tom.getMonth() + 1, day: tom.getDate() };
+  }
 
   // Try DD-MM-YYYY or DD/MM/YYYY
   const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
@@ -126,8 +161,8 @@ export function parseDateString(dateStr: string | null | undefined): { year: num
     return { year, month, day };
   }
 
-  // Try YYYY-MM-DD
-  const ymdMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  // Try YYYY-MM-DD or YYYY/MM/DD
+  const ymdMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
   if (ymdMatch) {
     const year = parseInt(ymdMatch[1], 10);
     const month = parseInt(ymdMatch[2], 10);
@@ -138,16 +173,26 @@ export function parseDateString(dateStr: string | null | undefined): { year: num
     return { year, month, day };
   }
 
+  // Fallback: Date parse for ISO or standard strings
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return {
+      year: parsed.getFullYear(),
+      month: parsed.getMonth() + 1,
+      day: parsed.getDate(),
+    };
+  }
+
   return null;
 }
 
 export function parseTimeString(timeStr: string | null | undefined): { hours: number; minutes: number } | null {
   if (!timeStr || typeof timeStr !== "string") return null;
-  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+  const match = timeStr.trim().match(/^(\d{1,2})(?::(\d{2}))?(?::\d{2})?\s*(AM|PM)?$/i);
   if (!match) return null;
 
   let hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
+  const minutes = match[2] ? parseInt(match[2], 10) : 0;
   const ampm = match[3]?.toUpperCase();
 
   if (minutes < 0 || minutes > 59) return null;
@@ -320,7 +365,7 @@ export async function verifyToolAuthorization(
     getHeader("x-api-key") ||
     getHeader("authorization")?.replace(/^Bearer\s+/i, "");
 
-  if (!providedSecret || providedSecret !== configuredSecret) {
+  if (!providedSecret || !timingSafeSecretEqual(providedSecret, configuredSecret)) {
     console.warn(
       `[Retell Tool Auth Diagnostic] status=401 reason="Invalid or missing tool secret header" hasHeader=${Boolean(providedSecret)}`
     );
@@ -432,21 +477,26 @@ export async function checkAvailability(
   input: CheckAvailabilityInput,
   options: BookingServiceOptions = {},
 ): Promise<CheckAvailabilityResult> {
-  const { preferred_date, location, timezone: explicitTimezone } = input;
+  const preferred_date = input.preferred_date || (input as any).date;
+  const location = input.location;
+  const explicitTimezone = input.timezone;
 
   if (!preferred_date || typeof preferred_date !== "string" || !preferred_date.trim()) {
     return {
       status: "error",
+      statusCode: 400,
       available_slots: [],
       total_slots: 0,
       message: "Missing preferred_date parameter. Expected format: DD-MM-YYYY.",
     };
   }
 
-  const parsedDate = parseDateString(preferred_date);
+  const now = options.now ?? new Date();
+  const parsedDate = parseDateString(preferred_date, now);
   if (!parsedDate) {
     return {
       status: "error",
+      statusCode: 400,
       available_slots: [],
       total_slots: 0,
       message: `Invalid date format: '${preferred_date}'. Please provide date in DD-MM-YYYY format (e.g. 01-11-2026).`,
@@ -454,7 +504,6 @@ export async function checkAvailability(
   }
 
   const timezone = resolveLocationTimezone(location, explicitTimezone);
-  const now = options.now ?? new Date();
 
   // Validate that the entire day is not in the past
   const startOfDay = createDateInTimezone(parsedDate.year, parsedDate.month, parsedDate.day, 0, 0, timezone);
@@ -463,6 +512,7 @@ export async function checkAvailability(
   if (endOfDay.getTime() <= now.getTime()) {
     return {
       status: "unavailable",
+      statusCode: 200,
       available_slots: [],
       total_slots: 0,
       date: preferred_date.trim(),
@@ -479,6 +529,7 @@ export async function checkAvailability(
   if (!calcomApiKey || calcomApiKey === "replace-with-cal-com-api-key" || calcomApiKey.includes("replace-")) {
     return {
       status: "error",
+      statusCode: 500,
       available_slots: [],
       total_slots: 0,
       message: "Scheduling provider is not configured. Missing or invalid CALCOM_API_KEY.",
@@ -488,6 +539,7 @@ export async function checkAvailability(
   if (!calcomEventTypeId) {
     return {
       status: "error",
+      statusCode: 500,
       available_slots: [],
       total_slots: 0,
       message: "Scheduling provider is not configured. Missing CALCOM_EVENT_TYPE_ID.",
@@ -498,6 +550,7 @@ export async function checkAvailability(
   if (isNaN(numericEventTypeId) || numericEventTypeId <= 0) {
     return {
       status: "error",
+      statusCode: 500,
       available_slots: [],
       total_slots: 0,
       message: `Invalid CALCOM_EVENT_TYPE_ID: '${calcomEventTypeId}' is not a valid numeric event type ID.`,
@@ -529,6 +582,7 @@ export async function checkAvailability(
       );
       return {
         status: "error",
+        statusCode: 502,
         available_slots: [],
         total_slots: 0,
         message: "Cal.com authentication failed. Please verify CALCOM_API_KEY.",
@@ -541,6 +595,7 @@ export async function checkAvailability(
       );
       return {
         status: "error",
+        statusCode: 502,
         available_slots: [],
         total_slots: 0,
         message: `Cal.com event type '${numericEventTypeId}' was not found. Please verify CALCOM_EVENT_TYPE_ID.`,
@@ -553,6 +608,7 @@ export async function checkAvailability(
       );
       return {
         status: "error",
+        statusCode: 429,
         available_slots: [],
         total_slots: 0,
         message: "Cal.com rate limit reached. Please try again shortly.",
@@ -571,6 +627,7 @@ export async function checkAvailability(
       );
       return {
         status: "error",
+        statusCode: 502,
         available_slots: [],
         total_slots: 0,
         message: `Booking provider returned an error (HTTP ${response.status}).`,
@@ -583,6 +640,7 @@ export async function checkAvailability(
     if (allSlots.length === 0) {
       return {
         status: "unavailable",
+        statusCode: 200,
         available_slots: [],
         total_slots: 0,
         date: preferred_date.trim(),
@@ -593,6 +651,7 @@ export async function checkAvailability(
 
     return {
       status: "available",
+      statusCode: 200,
       available_slots: allSlots,
       total_slots: allSlots.length,
       date: preferred_date.trim(),
@@ -606,6 +665,7 @@ export async function checkAvailability(
     if (calcomError?.name === "AbortError" || /timeout/i.test(calcomError?.message)) {
       return {
         status: "error",
+        statusCode: 504,
         available_slots: [],
         total_slots: 0,
         message: "Scheduling provider request timed out.",
@@ -613,6 +673,7 @@ export async function checkAvailability(
     }
     return {
       status: "error",
+      statusCode: 502,
       available_slots: [],
       total_slots: 0,
       message: `Booking provider error: ${calcomError?.message || "Connection refused"}.`,
@@ -624,41 +685,41 @@ export async function bookAppointment(
   input: BookAppointmentInput,
   options: BookingServiceOptions = {},
 ): Promise<BookAppointmentResult> {
-  const {
-    name,
-    phone_number,
-    email,
-    appointment_type = "Property Viewing",
-    property_type = "Property",
-    location = "Hyderabad",
-    slot_date,
-    slot_time,
-    timezone: explicitTimezone,
-  } = input;
+  const name = input.name || (input as any).customer_name || (input as any).caller_name;
+  const phone_number = input.phone_number || (input as any).phone || (input as any).caller_phone;
+  const email = input.email;
+  const appointment_type = input.appointment_type || (input as any).type || "Property Viewing";
+  const property_type = input.property_type || "Property";
+  const location = input.location || "Hyderabad";
+  const slot_date = input.slot_date || (input as any).date;
+  const slot_time = input.slot_time || (input as any).time;
+  const explicitTimezone = input.timezone;
 
   // Validation
   if (!name?.trim()) {
-    return { status: "error", booking_status: "failed", message: "Caller name is required for booking." };
+    return { status: "error", statusCode: 400, booking_status: "failed", message: "Caller name is required for booking." };
   }
   if (!phone_number?.trim()) {
-    return { status: "error", booking_status: "failed", message: "Phone number is required for booking." };
+    return { status: "error", statusCode: 400, booking_status: "failed", message: "Phone number is required for booking." };
   }
   if (!slot_date?.trim()) {
-    return { status: "error", booking_status: "failed", message: "Appointment slot date is required (DD-MM-YYYY)." };
+    return { status: "error", statusCode: 400, booking_status: "failed", message: "Appointment slot date is required (DD-MM-YYYY)." };
   }
   if (!slot_time?.trim()) {
-    return { status: "error", booking_status: "failed", message: "Appointment slot time is required (e.g. 10:00 AM)." };
+    return { status: "error", statusCode: 400, booking_status: "failed", message: "Appointment slot time is required (e.g. 10:00 AM)." };
   }
 
   const sanitizedEmail = email?.trim() ? email.trim().slice(0, 150) : null;
   if (sanitizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitizedEmail)) {
-    return { status: "error", booking_status: "failed", message: "The provided email address is invalid." };
+    return { status: "error", statusCode: 400, booking_status: "failed", message: "The provided email address is invalid." };
   }
 
-  const parsedDate = parseDateString(slot_date);
+  const now = options.now ?? new Date();
+  const parsedDate = parseDateString(slot_date, now);
   if (!parsedDate) {
     return {
       status: "error",
+      statusCode: 400,
       booking_status: "failed",
       message: `Invalid slot_date: '${slot_date}'. Expected format is DD-MM-YYYY.`,
     };
@@ -668,6 +729,7 @@ export async function bookAppointment(
   if (!parsedTime) {
     return {
       status: "error",
+      statusCode: 400,
       booking_status: "failed",
       message: `Invalid slot_time: '${slot_time}'. Expected format like 10:00 AM or 04:00 PM.`,
     };
@@ -683,11 +745,11 @@ export async function bookAppointment(
     timezone,
   );
   const endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000); // 60 minutes
-  const now = options.now ?? new Date();
 
   if (startsAt.getTime() < now.getTime()) {
     return {
       status: "unavailable",
+      statusCode: 409,
       booking_status: "failed",
       message: `Cannot book a slot in the past (${slot_date} ${slot_time}). Please choose a future slot.`,
     };
@@ -701,6 +763,7 @@ export async function bookAppointment(
   if (!calcomApiKey || calcomApiKey === "replace-with-cal-com-api-key" || calcomApiKey.includes("replace-")) {
     return {
       status: "error",
+      statusCode: 500,
       booking_status: "failed",
       message: "Scheduling provider is not configured. Missing or invalid CALCOM_API_KEY.",
     };
@@ -709,6 +772,7 @@ export async function bookAppointment(
   if (!calcomEventTypeId) {
     return {
       status: "error",
+      statusCode: 500,
       booking_status: "failed",
       message: "Scheduling provider is not configured. Missing CALCOM_EVENT_TYPE_ID.",
     };
@@ -718,6 +782,7 @@ export async function bookAppointment(
   if (isNaN(numericEventTypeId) || numericEventTypeId <= 0) {
     return {
       status: "error",
+      statusCode: 500,
       booking_status: "failed",
       message: `Invalid CALCOM_EVENT_TYPE_ID: '${calcomEventTypeId}' is not a valid numeric event type ID.`,
     };
@@ -725,7 +790,7 @@ export async function bookAppointment(
 
   // Resolve organization and check local DB for duplicate/conflict before calling Cal.com
   const db = options.db ?? defaultPrisma;
-  let organizationId: string | null = null;
+  let organizationId: string | null = options.organizationId ?? null;
   const retellAgentId = input.agent_id || input.call?.agent_id;
 
   if (retellAgentId && db?.providerLink?.findFirst) {
@@ -762,6 +827,7 @@ export async function bookAppointment(
       if (existingAppt) {
         return {
           status: "unavailable",
+          statusCode: 409,
           booking_status: "failed",
           message: `The slot at ${slot_time} on ${slot_date} is already booked. Please choose another time.`,
         };
@@ -810,6 +876,7 @@ export async function bookAppointment(
       );
       return {
         status: "unavailable",
+        statusCode: 409,
         booking_status: "failed",
         message: "The requested time slot is unavailable or has already been booked on Cal.com. Please choose another slot.",
       };
@@ -821,6 +888,7 @@ export async function bookAppointment(
       );
       return {
         status: "error",
+        statusCode: 502,
         booking_status: "failed",
         message: "Cal.com authentication failed. Please check CALCOM_API_KEY.",
       };
@@ -832,6 +900,7 @@ export async function bookAppointment(
       );
       return {
         status: "error",
+        statusCode: 502,
         booking_status: "failed",
         message: `Cal.com event type '${numericEventTypeId}' was not found. Please check CALCOM_EVENT_TYPE_ID.`,
       };
@@ -843,6 +912,7 @@ export async function bookAppointment(
       );
       return {
         status: "error",
+        statusCode: 429,
         booking_status: "failed",
         message: "Cal.com rate limit reached. Please try again shortly.",
       };
@@ -860,6 +930,7 @@ export async function bookAppointment(
       );
       return {
         status: "error",
+        statusCode: 502,
         booking_status: "failed",
         message: `Booking provider returned an error (HTTP ${response.status}). Booking could not be confirmed.`,
       };
@@ -884,6 +955,7 @@ export async function bookAppointment(
     if (!calcomBookingUid) {
       return {
         status: "error",
+        statusCode: 502,
         booking_status: "failed",
         message: "Cal.com response was missing a valid booking confirmation identifier.",
       };
@@ -895,12 +967,14 @@ export async function bookAppointment(
     if (err?.name === "AbortError" || /timeout/i.test(err?.message)) {
       return {
         status: "error",
+        statusCode: 504,
         booking_status: "failed",
         message: "Scheduling provider request timed out.",
       };
     }
     return {
       status: "error",
+      statusCode: 502,
       booking_status: "failed",
       message: `Booking provider error: ${err?.message || "Failed to connect to Cal.com"}.`,
     };
@@ -1018,6 +1092,7 @@ export async function bookAppointment(
 
   return {
     status: "confirmed",
+    statusCode: 200,
     booking_status: "confirmed",
     booking_id: bookingId,
     booking_uid: String(calcomBookingUid),
@@ -1037,11 +1112,15 @@ export async function takeMessage(
   input: TakeMessageInput,
   options: BookingServiceOptions = {},
 ): Promise<TakeMessageResult> {
-  const { name, phone_number, email, message } = input;
+  const name = input.name || (input as any).caller_name || (input as any).customer_name;
+  const phone_number = input.phone_number || (input as any).phone || (input as any).caller_phone;
+  const email = input.email;
+  const message = input.message || (input as any).caller_message || (input as any).notes;
 
   if (!name?.trim() || !phone_number?.trim() || !message?.trim()) {
     return {
       success: false,
+      statusCode: 400,
       message: "Name, phone number, and message are required.",
     };
   }
@@ -1075,8 +1154,32 @@ export async function takeMessage(
 
         if (!organizationId) return;
 
+        const rawPhone = phone_number.trim();
+        const trimmedMsg = message.trim();
+
+        // Avoid duplicate records on rapid retries within 60 seconds
+        if (tx.auditLog?.findFirst) {
+          try {
+            const recentAudit = await tx.auditLog.findFirst({
+              where: {
+                organizationId,
+                entity: "caller_message",
+                createdAt: { gte: new Date(now.getTime() - 60_000) },
+              },
+              orderBy: { createdAt: "desc" },
+            });
+            if (
+              recentAudit?.details &&
+              (recentAudit.details as any).phoneNumber === rawPhone &&
+              (recentAudit.details as any).message === trimmedMsg
+            ) {
+              return;
+            }
+          } catch {}
+        }
+
         // Check if message is a Do-Not-Call (DNC) request
-        const lowerMsg = message.toLowerCase();
+        const lowerMsg = trimmedMsg.toLowerCase();
         const isDnc =
           lowerMsg.includes("stop calling") ||
           lowerMsg.includes("do not call") ||
@@ -1084,7 +1187,6 @@ export async function takeMessage(
           lowerMsg.includes("remove my number") ||
           lowerMsg.includes("remove me");
 
-        const rawPhone = phone_number.trim();
         let contact = await tx.contact.findFirst({
           where: {
             organizationId,
@@ -1096,7 +1198,7 @@ export async function takeMessage(
         });
 
         if (contact) {
-          await tx.contact.update({
+          contact = await tx.contact.update({
             where: { id: contact.id },
             data: {
               lastContactAt: now,
@@ -1133,12 +1235,37 @@ export async function takeMessage(
               callerName: name.trim(),
               phoneNumber: rawPhone,
               email: email?.trim() || null,
-              message: message.trim(),
+              message: trimmedMsg,
               isDnc,
               recordedAt: now.toISOString(),
             },
           },
         });
+
+        // Link with call record if call_id is supplied
+        const callId = input.call?.call_id;
+        if (callId && tx.call?.findFirst && tx.callEvent?.create) {
+          try {
+            const matchedCall = await tx.call.findFirst({
+              where: { externalCallId: callId, organizationId },
+            });
+            if (matchedCall) {
+              await tx.callEvent.create({
+                data: {
+                  callId: matchedCall.id,
+                  eventType: "caller_message",
+                  source: "retell_custom_tool",
+                  payload: {
+                    name: name.trim(),
+                    phoneNumber: rawPhone,
+                    message: trimmedMsg,
+                    isDnc,
+                  },
+                },
+              });
+            }
+          } catch {}
+        }
       });
     }
   } catch (dbError: any) {
@@ -1148,6 +1275,7 @@ export async function takeMessage(
 
   return {
     success: true,
+    statusCode: 200,
     message: "Your message has been successfully recorded.",
     name: name.trim(),
     phone_number: phone_number.trim(),

@@ -1,18 +1,41 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server.js";
 import {
   checkAvailability,
   extractToolPayload,
   verifyToolAuthorization,
-  CheckAvailabilityInput,
-} from "@/lib/server/booking/service";
+  type CheckAvailabilityInput,
+} from "../../../lib/server/booking/service.ts";
+
+const MAX_PAYLOAD_BYTES = 65_536; // 64 KB
 
 export async function POST(req: NextRequest) {
   try {
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_PAYLOAD_BYTES) {
+      return NextResponse.json(
+        {
+          status: "error",
+          available_slots: [],
+          total_slots: 0,
+          message: "Request payload too large.",
+        },
+        { status: 413 },
+      );
+    }
+
     let body = {};
     try {
       body = await req.json();
     } catch {
-      // Body not provided or not valid JSON
+      return NextResponse.json(
+        {
+          status: "error",
+          available_slots: [],
+          total_slots: 0,
+          message: "Invalid JSON request body.",
+        },
+        { status: 400 },
+      );
     }
 
     const payload = extractToolPayload<CheckAvailabilityInput>(body);
@@ -34,7 +57,8 @@ export async function POST(req: NextRequest) {
     const result = await checkAvailability(payload, {
       organizationId: auth.organizationId,
     });
-    return NextResponse.json(result, { status: 200 });
+    const status = result.statusCode || (result.status === "error" ? 400 : 200);
+    return NextResponse.json(result, { status });
   } catch (error: any) {
     console.error("Availability API error:", error?.message);
     return NextResponse.json(
@@ -44,7 +68,7 @@ export async function POST(req: NextRequest) {
         total_slots: 0,
         message: "An unexpected error occurred while checking availability.",
       },
-      { status: 200 },
+      { status: 500 },
     );
   }
 }
@@ -78,7 +102,8 @@ export async function GET(req: NextRequest) {
     const result = await checkAvailability(payload, {
       organizationId: auth.organizationId,
     });
-    return NextResponse.json(result, { status: 200 });
+    const status = result.statusCode || (result.status === "error" ? 400 : 200);
+    return NextResponse.json(result, { status });
   } catch (error: any) {
     console.error("Availability API GET error:", error?.message);
     return NextResponse.json(
@@ -88,7 +113,7 @@ export async function GET(req: NextRequest) {
         total_slots: 0,
         message: "An unexpected error occurred while checking availability.",
       },
-      { status: 200 },
+      { status: 500 },
     );
   }
 }
