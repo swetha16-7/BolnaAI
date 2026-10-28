@@ -266,7 +266,7 @@ test("1b. Availability lookup for October 27, 2026 villa viewing in Hyderabad wi
     const auth = (init?.headers as any)?.Authorization || (init?.headers as any)?.authorization;
     assert.equal(auth, `Bearer ${VALID_CAL_ENV.CALCOM_API_KEY}`);
     const apiVersion = (init?.headers as any)?.["cal-api-version"];
-    assert.equal(apiVersion, "2024-08-13");
+    assert.equal(apiVersion, "2024-09-04");
 
     // Standard Cal.com API v2 response with data.slots
     return new Response(
@@ -984,4 +984,170 @@ test("takeMessage deduplicates identical messages received within 60 seconds", a
   assert.equal(res2.success, true);
   // Audit log count should NOT increase due to deduplication
   assert.equal(mockDb._state.auditLogs.length, 1);
+});
+
+// -------------------------------------------------------------
+// Cal.com API v2 Verified Event Type 7283034 & Availability Tests
+// -------------------------------------------------------------
+test("Cal.com API v2 slots lookup for verified Event Type 7283034 uses 2024-09-04 and parses response", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  let capturedUrl = "";
+  let capturedHeaders: Record<string, string> = {};
+
+  const mockFetcher: typeof fetch = async (url, init) => {
+    capturedUrl = String(url);
+    const headers = init?.headers as any;
+    capturedHeaders = {
+      authorization: headers?.Authorization || headers?.authorization,
+      "cal-api-version": headers?.["cal-api-version"],
+      "content-type": headers?.["Content-Type"] || headers?.["content-type"],
+    };
+
+    // Official Cal.com API v2 slots response shape
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: {
+          "2026-11-01": [
+            { start: "2026-11-01T04:30:00.000Z" }, // 10:00 AM IST
+            { start: "2026-11-01T05:30:00.000Z" }, // 11:00 AM IST
+            { start: "2026-11-01T09:30:00.000Z" }, // 03:00 PM IST
+          ],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const result = await checkAvailability(
+    { preferred_date: "01-11-2026", location: "Hyderabad" },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: {
+        CALCOM_API_KEY: "cal_live_valid_key_123",
+        CALCOM_EVENT_TYPE_ID: "7283034",
+      },
+      fetchFn: mockFetcher,
+    },
+  );
+
+  // Verify headers and URL parameters
+  assert.equal(capturedHeaders["cal-api-version"], "2024-09-04");
+  assert.equal(capturedHeaders.authorization, "Bearer cal_live_valid_key_123");
+  assert.match(capturedUrl, /eventTypeId=7283034/);
+  assert.match(capturedUrl, /timeZone=Asia%2FKolkata/);
+  // Verify start and end are valid ISO-8601 strings
+  assert.match(capturedUrl, /start=2026-10-31T18%3A30%3A00\.000Z/);
+  assert.match(capturedUrl, /end=2026-11-01T18%3A30%3A00\.000Z/);
+
+  // Verify parsed slots
+  assert.equal(result.status, "available");
+  assert.equal(result.total_slots, 3);
+  assert.deepEqual(result.available_slots, ["10:00 AM", "11:00 AM", "03:00 PM"]);
+  assert.equal(result.timezone, "Asia/Kolkata");
+  assert.match(result.message, /Slots are available on 01-11-2026/);
+});
+
+test("Regression test: Upstream 404 route error (e.g. Cannot GET /v2/slots) is not falsely reported as event type missing", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  // Simulates NestJS route 404 when cal-api-version header is rejected
+  const mockRoute404Fetcher: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        statusCode: 404,
+        message: "Cannot GET /v2/slots?eventTypeId=7283034",
+        error: "Not Found",
+      }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const result = await checkAvailability(
+    { preferred_date: "01-11-2026", location: "Hyderabad" },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: {
+        CALCOM_API_KEY: "cal_live_key",
+        CALCOM_EVENT_TYPE_ID: "7283034",
+      },
+      fetchFn: mockRoute404Fetcher,
+    },
+  );
+
+  assert.equal(result.status, "error");
+  assert.equal(result.statusCode, 502);
+  // Must NOT falsely claim the event type 7283034 was not found
+  assert.doesNotMatch(result.message, /event type '7283034' was not found/i);
+  assert.match(result.message, /404 Not Found/i);
+});
+
+test("extractCalcomSlots handles flat slot array in response", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  const mockArrayFetcher: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: [
+          { start: "2026-11-01T04:30:00.000Z" },
+          { start: "2026-11-01T08:30:00.000Z" },
+        ],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const result = await checkAvailability(
+    { preferred_date: "01-11-2026", location: "Hyderabad" },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: {
+        CALCOM_API_KEY: "cal_live_key",
+        CALCOM_EVENT_TYPE_ID: "7283034",
+      },
+      fetchFn: mockArrayFetcher,
+    },
+  );
+
+  assert.equal(result.status, "available");
+  assert.equal(result.total_slots, 2);
+  assert.deepEqual(result.available_slots, ["10:00 AM", "02:00 PM"]);
+});
+
+test("CALCOM_SLOTS_API_VERSION environment variable override is respected", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  let capturedVersion = "";
+  const mockFetcher: typeof fetch = async (_url, init) => {
+    capturedVersion = (init?.headers as any)?.["cal-api-version"];
+    return new Response(
+      JSON.stringify({ status: "success", data: {} }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  await checkAvailability(
+    { preferred_date: "01-11-2026", location: "Hyderabad" },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: {
+        CALCOM_API_KEY: "cal_live_key",
+        CALCOM_EVENT_TYPE_ID: "7283034",
+        CALCOM_SLOTS_API_VERSION: "2024-09-04",
+      },
+      fetchFn: mockFetcher,
+    },
+  );
+
+  assert.equal(capturedVersion, "2024-09-04");
 });

@@ -422,6 +422,60 @@ export function extractCalcomSlots(
   isToday = false,
 ): string[] {
   if (!data || typeof data !== "object") return [];
+
+  const allSlots: string[] = [];
+  const seen = new Set<string>();
+
+  const processItem = (item: any) => {
+    let isoStr: string | null = null;
+    if (typeof item === "string") {
+      isoStr = item;
+    } else if (item && typeof item === "object") {
+      isoStr = item.start || item.time || item.slot || item.startTime || null;
+    }
+
+    if (isoStr) {
+      const slotDate = new Date(isoStr);
+      if (!isNaN(slotDate.getTime())) {
+        if (isToday && now && slotDate.getTime() <= now.getTime()) {
+          return;
+        }
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone: timezone,
+          hour: "numeric",
+          minute: "numeric",
+          hour12: false,
+        }).formatToParts(slotDate);
+        const hStr = parts.find((p) => p.type === "hour")?.value ?? "0";
+        const mStr = parts.find((p) => p.type === "minute")?.value ?? "0";
+        const formatted = formatTimeSlot(parseInt(hStr, 10), parseInt(mStr, 10));
+        if (!seen.has(formatted)) {
+          seen.add(formatted);
+          allSlots.push(formatted);
+        }
+      }
+    }
+  };
+
+  // 1. Direct array of slots (e.g., data = [...], data.data = [...], data.slots = [...], data.data.slots = [...])
+  const directList = Array.isArray(data)
+    ? data
+    : Array.isArray(data.data)
+    ? data.data
+    : Array.isArray(data.slots)
+    ? data.slots
+    : Array.isArray(data.data?.slots)
+    ? data.data.slots
+    : null;
+
+  if (directList) {
+    for (const item of directList) {
+      processItem(item);
+    }
+    return allSlots;
+  }
+
+  // 2. Map of date strings -> array of slots (e.g. data.data.slots, data.slots, data.data, or data itself)
   const slotsMap =
     data.data?.slots && typeof data.data.slots === "object" && !Array.isArray(data.data.slots)
       ? data.data.slots
@@ -433,40 +487,10 @@ export function extractCalcomSlots(
       ? data
       : {};
 
-  const allSlots: string[] = [];
-  const seen = new Set<string>();
-
   for (const dayKey of Object.keys(slotsMap)) {
     const daySlots = Array.isArray(slotsMap[dayKey]) ? slotsMap[dayKey] : [];
     for (const item of daySlots) {
-      let isoStr: string | null = null;
-      if (typeof item === "string") {
-        isoStr = item;
-      } else if (item && typeof item === "object") {
-        isoStr = item.start || item.time || item.slot || null;
-      }
-
-      if (isoStr) {
-        const slotDate = new Date(isoStr);
-        if (!isNaN(slotDate.getTime())) {
-          if (isToday && now && slotDate.getTime() <= now.getTime()) {
-            continue;
-          }
-          const parts = new Intl.DateTimeFormat("en-US", {
-            timeZone: timezone,
-            hour: "numeric",
-            minute: "numeric",
-            hour12: false,
-          }).formatToParts(slotDate);
-          const hStr = parts.find((p) => p.type === "hour")?.value ?? "0";
-          const mStr = parts.find((p) => p.type === "minute")?.value ?? "0";
-          const formatted = formatTimeSlot(parseInt(hStr, 10), parseInt(mStr, 10));
-          if (!seen.has(formatted)) {
-            seen.add(formatted);
-            allSlots.push(formatted);
-          }
-        }
-      }
+      processItem(item);
     }
   }
 
@@ -507,7 +531,15 @@ export async function checkAvailability(
 
   // Validate that the entire day is not in the past
   const startOfDay = createDateInTimezone(parsedDate.year, parsedDate.month, parsedDate.day, 0, 0, timezone);
-  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+  const nextDay = new Date(Date.UTC(parsedDate.year, parsedDate.month - 1, parsedDate.day + 1));
+  const endOfDay = createDateInTimezone(
+    nextDay.getUTCFullYear(),
+    nextDay.getUTCMonth() + 1,
+    nextDay.getUTCDate(),
+    0,
+    0,
+    timezone,
+  );
 
   if (endOfDay.getTime() <= now.getTime()) {
     return {
@@ -564,6 +596,8 @@ export async function checkAvailability(
   const isToday = now.getTime() >= startOfDay.getTime() && now.getTime() <= endOfDay.getTime();
 
   // Primary: Cal.com API v2 slots query
+  // Official Cal.com v2 slots endpoint uses version header 'cal-api-version: 2024-09-04'
+  const slotsApiVersion = env.CALCOM_SLOTS_API_VERSION?.trim() || env.CALCOM_API_VERSION?.trim() || "2024-09-04";
   const v2Url = `https://api.cal.com/v2/slots?eventTypeId=${encodeURIComponent(numericEventTypeId)}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&timeZone=${encodeURIComponent(timezone)}`;
 
   try {
@@ -571,7 +605,7 @@ export async function checkAvailability(
       method: "GET",
       headers: {
         Authorization: `Bearer ${calcomApiKey}`,
-        "cal-api-version": "2024-08-13",
+        "cal-api-version": slotsApiVersion,
         "Content-Type": "application/json",
       },
     });
@@ -590,15 +624,42 @@ export async function checkAvailability(
     }
 
     if (response.status === 404) {
+      let isExplicitEventTypeNotFound = false;
+      let errorDetail = "";
+      try {
+        const errJson = await response.clone().json();
+        const msg = String(errJson?.message || errJson?.error?.message || errJson?.error || "");
+        errorDetail = msg;
+        // Verify if upstream explicitly identified the event type as missing
+        if (
+          (/event\s*type/i.test(msg) || /not\s*found/i.test(msg)) &&
+          !/cannot\s*get/i.test(msg) &&
+          !/route/i.test(msg)
+        ) {
+          isExplicitEventTypeNotFound = true;
+        }
+      } catch {}
+
       console.warn(
-        `[Cal.com Availability Diagnostic] upstream_status=404 eventTypeId=${numericEventTypeId} date=${preferred_date.trim()} tz=${timezone}`
+        `[Cal.com Availability Diagnostic] upstream_status=404 eventTypeId=${numericEventTypeId} date=${preferred_date.trim()} tz=${timezone}${errorDetail ? ` detail="${errorDetail.slice(0, 150)}"` : ""}`
       );
+
+      if (isExplicitEventTypeNotFound) {
+        return {
+          status: "error",
+          statusCode: 502,
+          available_slots: [],
+          total_slots: 0,
+          message: `Cal.com event type '${numericEventTypeId}' was not found. Please verify CALCOM_EVENT_TYPE_ID.`,
+        };
+      }
+
       return {
         status: "error",
         statusCode: 502,
         available_slots: [],
         total_slots: 0,
-        message: `Cal.com event type '${numericEventTypeId}' was not found. Please verify CALCOM_EVENT_TYPE_ID.`,
+        message: `Booking provider availability endpoint returned 404 Not Found.${errorDetail ? ` ${errorDetail.slice(0, 120)}` : ""}`,
       };
     }
 
@@ -630,7 +691,7 @@ export async function checkAvailability(
         statusCode: 502,
         available_slots: [],
         total_slots: 0,
-        message: `Booking provider returned an error (HTTP ${response.status}).`,
+        message: `Booking provider returned an error (HTTP ${response.status}).${errorDetail ? ` ${errorDetail}` : ""}`,
       };
     }
 
@@ -860,11 +921,12 @@ export async function bookAppointment(
   };
 
   try {
+    const bookingApiVersion = env.CALCOM_BOOKING_API_VERSION?.trim() || env.CALCOM_API_VERSION?.trim() || "2024-08-13";
     let response = await fetcher("https://api.cal.com/v2/bookings", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${calcomApiKey}`,
-        "cal-api-version": "2024-08-13",
+        "cal-api-version": bookingApiVersion,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(bookingBody),
