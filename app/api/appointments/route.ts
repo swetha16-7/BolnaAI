@@ -19,9 +19,20 @@ export async function GET() {
         id: true,
         startsAt: true,
         endsAt: true,
+        timezone: true,
         status: true,
         serviceName: true,
-        contact: { select: { id: true, firstName: true, lastName: true } },
+        calcomEventId: true,
+        metadata: true,
+        contact: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            email: true,
+          },
+        },
       },
     });
 

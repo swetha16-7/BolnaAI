@@ -5,7 +5,9 @@ import {
   ApiError,
   api,
   type ApiAgent,
+  type ApiAppointment,
   type ApiCall,
+  type ApiCallerMessage,
   type ApiContact,
   type ApiDashboard,
   type ApiRetellContact,
@@ -194,16 +196,15 @@ interface StateContextType {
   addContact: (contact: Record<string, unknown>) => Promise<boolean>;
   updateContact: (id: string, contact: Record<string, unknown>) => Promise<boolean>;
   deleteContact: (id: string) => Promise<boolean>;
-  appointments: Array<{
-    id: string;
-    startsAt: string;
-    endsAt: string | null;
-    status: string;
-    serviceName: string | null;
-    contact: { id: string; firstName: string; lastName: string | null } | null;
-  }>;
+  appointments: ApiAppointment[];
   appointmentsLoading: boolean;
   appointmentsError: string | null;
+  loadAppointments: () => Promise<void>;
+  messages: ApiCallerMessage[];
+  messagesLoading: boolean;
+  messagesError: string | null;
+  loadMessages: () => Promise<void>;
+  updateMessageStatus: (id: string, status: "pending" | "handled" | "archived") => Promise<boolean>;
   dashboard: ApiDashboard | null;
   dashboardLoading: boolean;
   dashboardError: string | null;
@@ -500,6 +501,9 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [appointments, setAppointments] = useState<StateContextType["appointments"]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
   const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ApiCallerMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<ApiDashboard | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
@@ -548,6 +552,7 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCalls([]);
     setContacts([]);
     setAppointments([]);
+    setMessages([]);
     setDashboard(null);
     setProfile({ username: "", email: "", role: "", mfa: "Not configured" });
   }, []);
@@ -714,6 +719,37 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [reportLoadError]);
 
+  const loadMessages = useCallback(async () => {
+    setMessagesLoading(true);
+    setMessagesError(null);
+    try {
+      const result = await api.messages.list();
+      setMessages(result.messages);
+    } catch (error) {
+      reportLoadError(error, "Unable to load messages.", setMessagesError);
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, [reportLoadError]);
+
+  const updateMessageStatus = useCallback(
+    async (id: string, status: "pending" | "handled" | "archived"): Promise<boolean> => {
+      try {
+        const result = await api.messages.updateStatus(id, status);
+        if (result.success && result.message) {
+          setMessages((prev) => prev.map((m) => (m.id === id ? result.message : m)));
+          showToast(`Message marked as ${status}.`, "success");
+          return true;
+        }
+        return false;
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : "Unable to update message.", "error");
+        return false;
+      }
+    },
+    [showToast],
+  );
+
   const loadUserData = useCallback(async () => {
     await Promise.all([
       refreshAgents(),
@@ -722,8 +758,9 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       loadActiveCalls(),
       refreshDashboard(),
       loadAppointments(),
+      loadMessages(),
     ]);
-  }, [loadActiveCalls, loadCalls, loadContacts, loadAppointments, refreshAgents, refreshDashboard]);
+  }, [loadActiveCalls, loadCalls, loadContacts, loadAppointments, loadMessages, refreshAgents, refreshDashboard]);
 
   const setAuthenticatedUser = useCallback(async (authenticatedUser: ApiUser) => {
     setUser(authenticatedUser);
@@ -1024,6 +1061,12 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         appointments,
         appointmentsLoading,
         appointmentsError,
+        loadAppointments,
+        messages,
+        messagesLoading,
+        messagesError,
+        loadMessages,
+        updateMessageStatus,
         dashboard,
         dashboardLoading,
         dashboardError,

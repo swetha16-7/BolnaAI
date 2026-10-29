@@ -199,9 +199,32 @@ export interface ApiAppointment {
   id: string;
   startsAt: string;
   endsAt: string | null;
+  timezone?: string | null;
   status: string;
   serviceName: string | null;
-  contact: { id: string; firstName: string; lastName: string | null } | null;
+  calcomEventId?: string | null;
+  metadata?: Record<string, any> | null;
+  contact: {
+    id: string;
+    firstName: string;
+    lastName: string | null;
+    phone?: string | null;
+    email?: string | null;
+  } | null;
+}
+
+export interface ApiCallerMessage {
+  id: string;
+  callerName: string;
+  phoneNumber: string;
+  email: string | null;
+  message: string;
+  reason?: string | null;
+  isDnc: boolean;
+  status: "pending" | "handled" | "archived";
+  contactId: string | null;
+  callId: string | null;
+  createdAt: string;
 }
 
 export type ApiMembershipRole = "OWNER" | "ADMIN" | "MANAGER" | "MEMBER";
@@ -417,6 +440,15 @@ export const api = {
   },
   appointments: {
     list: () => apiRequest<{ appointments: ApiAppointment[] }>("/api/appointments"),
+  },
+  messages: {
+    list: (fetcher: typeof fetch = fetch) =>
+      apiRequest<{ messages: ApiCallerMessage[] }>("/api/messages", {}, fetcher),
+    updateStatus: (id: string, status: "pending" | "handled" | "archived", fetcher: typeof fetch = fetch) =>
+      apiRequest<{ success: true; message: ApiCallerMessage }>(`/api/messages/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: jsonBody({ status }),
+      }, fetcher),
   },
   providers: {
     configurationStatus: () =>

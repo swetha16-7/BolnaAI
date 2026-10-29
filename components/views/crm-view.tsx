@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table";
 import { useAppState, type ContactRecord } from "@/context/StateContext";
 import { generateSecureClientUuid } from "@/lib/utils";
-import { Mail, Phone, PhoneCall, Plus, Search, Pencil, X } from "lucide-react";
+import { Mail, Phone, PhoneCall, Plus, Search, Pencil, X, RefreshCw } from "lucide-react";
 
 const tabs = [
   { key: "leads", label: "Leads" },
@@ -73,6 +73,12 @@ export const CrmView: React.FC = () => {
     appointments,
     appointmentsLoading,
     appointmentsError,
+    loadAppointments,
+    messages,
+    messagesLoading,
+    messagesError,
+    loadMessages,
+    updateMessageStatus,
   } = useAppState();
   const [activeTab, setActiveTab] = useState<CrmTab>("leads");
   const [search, setSearch] = useState("");
@@ -85,7 +91,10 @@ export const CrmView: React.FC = () => {
   const [callAgentId, setCallAgentId] = useState("");
   const [callSubmitting, setCallSubmitting] = useState(false);
   const [callConsentConfirmed, setCallConsentConfirmed] = useState(false);
+  const [updatingMessageId, setUpdatingMessageId] = useState<string | null>(null);
+
   const callAgents = agents.filter((agent) => agent.status === "active" && agent.retellAgentId.trim());
+
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       void loadContacts(
@@ -95,6 +104,14 @@ export const CrmView: React.FC = () => {
     }, 250);
     return () => window.clearTimeout(timeout);
   }, [search, statusFilter, activeTab, loadContacts]);
+
+  useEffect(() => {
+    if (activeTab === "bookings") {
+      void loadAppointments();
+    } else if (activeTab === "followups") {
+      void loadMessages();
+    }
+  }, [activeTab, loadAppointments, loadMessages]);
 
   const beginCreate = () => {
     setEditing(null);
@@ -214,7 +231,7 @@ export const CrmView: React.FC = () => {
     <div>
       <PageHeader
         title="Leads & Appointments"
-        description="Manage organization contacts and appointments stored in your workspace"
+        description="Manage organization contacts, appointments, and caller messages stored in your workspace"
       >
         {activeTab !== "bookings" && activeTab !== "followups" && (
           <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" onClick={beginCreate}>
@@ -367,36 +384,79 @@ export const CrmView: React.FC = () => {
 
       {activeTab === "bookings" && (
         <Card className="border-border/60">
-          <div className="border-b border-border/60 px-6 py-4">
-            <h3 className="text-lg font-semibold">Appointments</h3>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6 py-4">
+            <h3 className="text-lg font-semibold">Appointments &amp; Bookings</h3>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadAppointments()}
+              disabled={appointmentsLoading}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${appointmentsLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
           </div>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Contact</TableHead>
-                  <TableHead>Service</TableHead>
+                  <TableHead>Service &amp; Location</TableHead>
                   <TableHead>Date &amp; Time</TableHead>
+                  <TableHead>Reference (Cal.com)</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {appointmentsLoading ? (
-                  <TableRow><TableCell colSpan={4} className="py-8 text-center">Loading appointments...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="py-8 text-center">Loading appointments...</TableCell></TableRow>
                 ) : appointmentsError ? (
-                  <TableRow><TableCell colSpan={4} role="alert" className="py-8 text-center">{appointmentsError}</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} role="alert" className="py-8 text-center">{appointmentsError}</TableCell></TableRow>
                 ) : appointments.length === 0 ? (
-                  <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">No appointments have been recorded.</TableCell></TableRow>
-                ) : appointments.map((appointment) => (
-                  <TableRow key={appointment.id}>
-                    <TableCell>{appointment.contact
-                      ? `${appointment.contact.firstName} ${appointment.contact.lastName ?? ""}`.trim()
-                      : "Unlinked contact"}</TableCell>
-                    <TableCell>{appointment.serviceName ?? "—"}</TableCell>
-                    <TableCell>{new Date(appointment.startsAt).toLocaleString()}</TableCell>
-                    <TableCell><StatusBadge status={appointment.status} /></TableCell>
-                  </TableRow>
-                ))}
+                  <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">No appointments have been recorded.</TableCell></TableRow>
+                ) : appointments.map((appointment) => {
+                  const location = (appointment.metadata as Record<string, unknown> | null)?.location as string | undefined;
+                  const calcomRef = appointment.calcomEventId || ((appointment.metadata as Record<string, unknown> | null)?.bookingUid as string | undefined);
+                  return (
+                    <TableRow key={appointment.id}>
+                      <TableCell>
+                        <div className="font-medium">
+                          {appointment.contact
+                            ? `${appointment.contact.firstName} ${appointment.contact.lastName ?? ""}`.trim()
+                            : "Unlinked contact"}
+                        </div>
+                        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+                          {appointment.contact?.phone && (
+                            <span className="flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              {appointment.contact.phone}
+                            </span>
+                          )}
+                          {appointment.contact?.email && (
+                            <span className="flex items-center gap-1">
+                              <Mail className="h-3 w-3" />
+                              {appointment.contact.email}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{appointment.serviceName ?? "Property Viewing"}</div>
+                        {location && <div className="text-xs text-muted-foreground">📍 {location}</div>}
+                      </TableCell>
+                      <TableCell>
+                        <div>{new Date(appointment.startsAt).toLocaleString()}</div>
+                        {appointment.timezone && (
+                          <div className="text-xs text-muted-foreground">{appointment.timezone}</div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-mono text-xs">{calcomRef ?? "—"}</span>
+                      </TableCell>
+                      <TableCell><StatusBadge status={appointment.status} /></TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
@@ -405,8 +465,108 @@ export const CrmView: React.FC = () => {
 
       {activeTab === "followups" && (
         <Card className="border-border/60">
-          <CardContent className="py-10 text-center text-muted-foreground">
-            Follow-up tasks are not connected: the current database schema has no follow-up records.
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6 py-4">
+            <div>
+              <h3 className="text-lg font-semibold">Caller Messages &amp; Follow-Ups</h3>
+              <p className="text-xs text-muted-foreground">
+                Inquiries, callback requests, and notes captured by Retell AI voice agents
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadMessages()}
+              disabled={messagesLoading}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${messagesLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Caller</TableHead>
+                  <TableHead>Message &amp; Reason</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Received</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {messagesLoading ? (
+                  <TableRow><TableCell colSpan={6} className="py-8 text-center">Loading messages...</TableCell></TableRow>
+                ) : messagesError ? (
+                  <TableRow><TableCell colSpan={6} role="alert" className="py-8 text-center">{messagesError}</TableCell></TableRow>
+                ) : messages.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No caller messages or follow-ups have been recorded.</TableCell></TableRow>
+                ) : messages.map((msg) => (
+                  <TableRow key={msg.id}>
+                    <TableCell>
+                      <div className="font-medium">{msg.callerName}</div>
+                      <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+                        {msg.phoneNumber && (
+                          <span className="flex items-center gap-1">
+                            <Phone className="h-3 w-3" />
+                            {msg.phoneNumber}
+                          </span>
+                        )}
+                        {msg.email && (
+                          <span className="flex items-center gap-1">
+                            <Mail className="h-3 w-3" />
+                            {msg.email}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-md">
+                      <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                      {msg.reason && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">Reason:</span> {msg.reason}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {msg.isDnc ? (
+                        <span className="inline-flex items-center rounded-full bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-400">
+                          Do Not Call
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400">
+                          Callback
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(msg.createdAt).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={msg.status} />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={updatingMessageId === msg.id}
+                        onClick={async () => {
+                          setUpdatingMessageId(msg.id);
+                          try {
+                            const newStatus = msg.status === "handled" ? "pending" : "handled";
+                            await updateMessageStatus(msg.id, newStatus);
+                          } finally {
+                            setUpdatingMessageId(null);
+                          }
+                        }}
+                      >
+                        {msg.status === "handled" ? "Mark Pending" : "Mark Handled"}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       )}

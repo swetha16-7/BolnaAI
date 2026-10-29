@@ -53,6 +53,7 @@ export type BookAppointmentInput = {
   time?: string | null;
   timezone?: string | null;
   agent_id?: string | null;
+  agent_role?: string | null;
   call?: { agent_id?: string | null; call_id?: string | null } | null;
 };
 
@@ -91,6 +92,7 @@ export type TakeMessageInput = {
   phone_number?: string | null;
   email?: string | null;
   message?: string | null;
+  reason?: string | null;
   agent_id?: string | null;
   call?: { agent_id?: string | null; call_id?: string | null } | null;
 };
@@ -1124,11 +1126,39 @@ export async function bookAppointment(
               slotDate: slot_date,
               slotTime: slot_time,
               calcomBookingUid: String(calcomBookingUid),
+              callId: input.call?.call_id || null,
             },
           },
         });
 
         bookingId = appt.id;
+
+        // Link with originating call if call_id is supplied
+        const originatingCallId = input.call?.call_id;
+        if (originatingCallId && tx.call?.findFirst && tx.callEvent?.create) {
+          try {
+            const matchedCall = await tx.call.findFirst({
+              where: { externalCallId: originatingCallId, organizationId },
+            });
+            if (matchedCall) {
+              await tx.callEvent.create({
+                data: {
+                  callId: matchedCall.id,
+                  eventType: "appointment_booked",
+                  source: "retell_custom_tool",
+                  payload: {
+                    appointmentId: appt.id,
+                    calcomBookingUid: String(calcomBookingUid),
+                    customerName: name.trim(),
+                    phoneNumber: rawPhone,
+                    startsAt: startsAt.toISOString(),
+                    title,
+                  },
+                },
+              });
+            }
+          } catch {}
+        }
 
         await tx.auditLog.create({
           data: {
@@ -1142,6 +1172,7 @@ export async function bookAppointment(
               phoneNumber: rawPhone,
               startsAt: startsAt.toISOString(),
               serviceName: title,
+              callId: originatingCallId || null,
             },
           },
         });
@@ -1271,7 +1302,7 @@ export async function takeMessage(
           const nameParts = name.trim().split(" ");
           const firstName = nameParts[0] || "Caller";
           const lastName = nameParts.slice(1).join(" ") || null;
-          await tx.contact.create({
+          contact = await tx.contact.create({
             data: {
               organizationId,
               firstName,
@@ -1288,6 +1319,7 @@ export async function takeMessage(
         }
 
         // Record message in audit log
+        const callId = input.call?.call_id;
         await tx.auditLog.create({
           data: {
             organizationId,
@@ -1298,14 +1330,17 @@ export async function takeMessage(
               phoneNumber: rawPhone,
               email: email?.trim() || null,
               message: trimmedMsg,
+              reason: input.reason?.trim() || null,
               isDnc,
+              status: "pending",
+              contactId: contact?.id || null,
+              callId: callId || null,
               recordedAt: now.toISOString(),
             },
           },
         });
 
         // Link with call record if call_id is supplied
-        const callId = input.call?.call_id;
         if (callId && tx.call?.findFirst && tx.callEvent?.create) {
           try {
             const matchedCall = await tx.call.findFirst({
