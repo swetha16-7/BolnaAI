@@ -1151,3 +1151,237 @@ test("CALCOM_SLOTS_API_VERSION environment variable override is respected", asyn
 
   assert.equal(capturedVersion, "2024-09-04");
 });
+
+test("Cal.com API v2 booking uses 2024-09-04 by default, preserves attendee/schedule details, and accepts field aliases", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  let capturedUrl = "";
+  let capturedHeaders: Record<string, string> = {};
+  let capturedBody: any = null;
+
+  const mockFetcher: typeof fetch = async (url, init) => {
+    capturedUrl = String(url);
+    const headers = init?.headers as any;
+    capturedHeaders = {
+      authorization: headers?.Authorization || headers?.authorization,
+      "cal-api-version": headers?.["cal-api-version"],
+      "content-type": headers?.["Content-Type"] || headers?.["content-type"],
+    };
+    capturedBody = JSON.parse(String(init?.body || "{}"));
+
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: {
+          uid: "cal_booking_uid_ac_repair_123",
+          title: "AC Repair for Kiran",
+          start: "2026-11-02T06:00:00.000Z",
+          duration: 60,
+        },
+      }),
+      { status: 201, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const input: BookAppointmentInput = {
+    customer_name: "Kiran Sharma",
+    phone_number: "+919876543210",
+    email: "kiran@example.com",
+    service_type: "AC Repair",
+    service_address: "Banjara Hills, Hyderabad",
+    preferred_date: "02-11-2026",
+    preferred_time: "11:30 AM",
+  };
+
+  const result = await bookAppointment(input, {
+    db: mockDb as any,
+    now: simulatedNow,
+    env: {
+      CALCOM_API_KEY: "cal_live_valid_key_123",
+      CALCOM_EVENT_TYPE_ID: "7283034",
+    },
+    fetchFn: mockFetcher,
+  });
+
+  // Verify headers
+  assert.equal(capturedHeaders["cal-api-version"], "2024-09-04");
+  assert.equal(capturedHeaders.authorization, "Bearer cal_live_valid_key_123");
+  assert.equal(capturedUrl, "https://api.cal.com/v2/bookings");
+
+  // Verify payload matches Cal.com v2 specification
+  assert.equal(capturedBody.eventTypeId, 7283034);
+  assert.equal(capturedBody.start, "2026-11-02T06:00:00.000Z"); // 11:30 AM IST -> 06:00 UTC
+  assert.equal(capturedBody.attendee.name, "Kiran Sharma");
+  assert.equal(capturedBody.attendee.email, "kiran@example.com");
+  assert.equal(capturedBody.attendee.phoneNumber, "+919876543210");
+  assert.equal(capturedBody.attendee.timeZone, "Asia/Kolkata");
+
+  // Verify result
+  assert.equal(result.status, "confirmed");
+  assert.equal(result.booking_status, "confirmed");
+  assert.equal(result.booking_reference, "cal_booking_uid_ac_repair_123");
+  assert.match(result.message, /successfully booked/i);
+
+  // Verify DB persistence
+  const appts = mockDb._state.appointments;
+  assert.equal(appts.length, 1);
+  assert.equal(appts[0].calcomEventId, "cal_booking_uid_ac_repair_123");
+  assert.equal(appts[0].provider, "calcom");
+  assert.equal(appts[0].status, "confirmed");
+
+  const contacts = mockDb._state.contacts;
+  assert.equal(contacts.length, 1);
+  assert.equal(contacts[0].phone, "+919876543210");
+  assert.equal(contacts[0].firstName, "Kiran");
+});
+
+test("Cal.com HTTP 409 Conflict returns slot unavailable without creating database records", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  const mock409Fetcher: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "The requested time slot is unavailable or has already been booked.",
+      }),
+      { status: 409, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const result = await bookAppointment(
+    {
+      name: "Suresh",
+      phone_number: "+919876543210",
+      slot_date: "02-11-2026",
+      slot_time: "11:30 AM",
+      location: "Hyderabad",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mock409Fetcher,
+    },
+  );
+
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.statusCode, 409);
+  assert.equal(result.booking_status, "failed");
+  assert.match(result.message, /unavailable or has already been booked/i);
+  assert.equal(mockDb._state.appointments.length, 0);
+});
+
+test("Cal.com HTTP 400 validation error surfaces upstream message and does not report as unavailable", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  const mock400Fetcher: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: "Attendee email domain is not authorized for this event type",
+        },
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const result = await bookAppointment(
+    {
+      name: "Suresh",
+      phone_number: "+919876543210",
+      email: "suresh@blocked-domain.com",
+      slot_date: "02-11-2026",
+      slot_time: "11:30 AM",
+      location: "Hyderabad",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mock400Fetcher,
+    },
+  );
+
+  assert.equal(result.status, "error");
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.booking_status, "failed");
+  // Must NOT report as unavailable!
+  assert.notEqual(result.status, "unavailable");
+  assert.match(result.message, /Attendee email domain is not authorized/i);
+  assert.equal(mockDb._state.appointments.length, 0);
+});
+
+test("Cal.com HTTP 404 Event type not found returns error and does not persist appointment", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  const mock404Fetcher: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        error: { message: "Event type not found" },
+      }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const result = await bookAppointment(
+    {
+      name: "Suresh",
+      phone_number: "+919876543210",
+      slot_date: "02-11-2026",
+      slot_time: "11:30 AM",
+      location: "Hyderabad",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mock404Fetcher,
+    },
+  );
+
+  assert.equal(result.status, "error");
+  assert.equal(result.booking_status, "failed");
+  assert.match(result.message, /event type.*was not found/i);
+  assert.equal(mockDb._state.appointments.length, 0);
+});
+
+test("Cal.com response missing booking UID is not reported as confirmed", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  const mockNoUidFetcher: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: {}, // No UID or id
+      }),
+      { status: 201, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const result = await bookAppointment(
+    {
+      name: "Suresh",
+      phone_number: "+919876543210",
+      slot_date: "02-11-2026",
+      slot_time: "11:30 AM",
+      location: "Hyderabad",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockNoUidFetcher,
+    },
+  );
+
+  assert.equal(result.status, "error");
+  assert.equal(result.statusCode, 502);
+  assert.equal(result.booking_status, "failed");
+  assert.match(result.message, /missing a valid booking confirmation identifier/i);
+  assert.equal(mockDb._state.appointments.length, 0);
+});

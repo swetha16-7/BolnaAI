@@ -4,9 +4,11 @@ import { createRetellClient } from "../calls/retell.ts";
 
 export type CheckAvailabilityInput = {
   appointment_type?: string | null;
+  service_type?: string | null;
   preferred_date?: string | null;
   date?: string | null;
   location?: string | null;
+  service_address?: string | null;
   property_type?: string | null;
   timezone?: string | null;
   agent_id?: string | null;
@@ -42,15 +44,26 @@ export type CheckAvailabilityResult =
 
 export type BookAppointmentInput = {
   name?: string | null;
+  customer_name?: string | null;
+  caller_name?: string | null;
   phone_number?: string | null;
+  phoneNumber?: string | null;
+  phone?: string | null;
   email?: string | null;
   appointment_type?: string | null;
   property_type?: string | null;
   location?: string | null;
+  city?: string | null;
   slot_date?: string | null;
   slot_time?: string | null;
   date?: string | null;
   time?: string | null;
+  preferred_date?: string | null;
+  preferred_time?: string | null;
+  service_type?: string | null;
+  service_address?: string | null;
+  bookingFieldsResponses?: Record<string, any> | null;
+  responses?: Record<string, any> | null;
   timezone?: string | null;
   agent_id?: string | null;
   agent_role?: string | null;
@@ -521,7 +534,11 @@ export async function checkAvailability(
   options: BookingServiceOptions = {},
 ): Promise<CheckAvailabilityResult> {
   const preferred_date = input.preferred_date || (input as any).date;
-  const location = input.location;
+  const location =
+    input.location ||
+    (input as any).city ||
+    (input as any).service_address ||
+    (input as any).address;
   const explicitTimezone = input.timezone;
 
   if (!preferred_date || typeof preferred_date !== "string" || !preferred_date.trim()) {
@@ -783,19 +800,31 @@ export async function bookAppointment(
     input.call?.customer_number;
 
   const email = input.email || (input as any).attendee_email || (input as any).customer_email;
-  const appointment_type = input.appointment_type || (input as any).type || "Property Viewing";
+  const appointment_type =
+    input.appointment_type ||
+    (input as any).type ||
+    (input as any).service ||
+    (input as any).service_type ||
+    "Property Viewing";
   const property_type = input.property_type || (input as any).property || "Property";
-  const location = input.location || (input as any).city || "Hyderabad";
+  const location =
+    input.location ||
+    (input as any).city ||
+    (input as any).service_address ||
+    (input as any).address ||
+    "Hyderabad";
 
   let slot_date =
     input.slot_date ||
     (input as any).date ||
+    (input as any).preferred_date ||
     (input as any).booking_date ||
     (input as any).appointment_date;
 
   let slot_time =
     input.slot_time ||
     (input as any).time ||
+    (input as any).preferred_time ||
     (input as any).booking_time ||
     (input as any).appointment_time ||
     (input as any).start_time ||
@@ -969,8 +998,9 @@ export async function bookAppointment(
   let calcomBookingUid: string | null = null;
   let meetingUrl = "";
 
-  const attendeeEmail = email?.trim() || `${phone_number.replace(/\D/g, "")}@customer.bolna.ai`;
-  const bookingBody = {
+  const cleanedDigits = phone_number.replace(/\D/g, "");
+  const attendeeEmail = email?.trim() || `${cleanedDigits || "caller"}@customer.bolna.ai`;
+  const bookingBody: Record<string, any> = {
     eventTypeId: numericEventTypeId,
     start: startsAt.toISOString(),
     attendee: {
@@ -988,8 +1018,14 @@ export async function bookAppointment(
     },
   };
 
+  if ((input as any).bookingFieldsResponses && typeof (input as any).bookingFieldsResponses === "object") {
+    bookingBody.bookingFieldsResponses = (input as any).bookingFieldsResponses;
+  } else if ((input as any).responses && typeof (input as any).responses === "object") {
+    bookingBody.bookingFieldsResponses = (input as any).responses;
+  }
+
   try {
-    const bookingApiVersion = env.CALCOM_BOOKING_API_VERSION?.trim() || env.CALCOM_API_VERSION?.trim() || "2024-08-13";
+    const bookingApiVersion = env.CALCOM_BOOKING_API_VERSION?.trim() || env.CALCOM_API_VERSION?.trim() || "2024-09-04";
     let response = await fetcher("https://api.cal.com/v2/bookings", {
       method: "POST",
       headers: {
@@ -1000,15 +1036,62 @@ export async function bookAppointment(
       body: JSON.stringify(bookingBody),
     });
 
-    if (response.status === 400) {
+    let errorDetail = "";
+    if (!response.ok) {
+      try {
+        const errJson = await response.clone().json();
+        if (typeof errJson?.message === "string") {
+          errorDetail = errJson.message.slice(0, 200);
+        } else if (typeof errJson?.error?.message === "string") {
+          errorDetail = errJson.error.message.slice(0, 200);
+        } else if (typeof errJson?.error === "string") {
+          errorDetail = errJson.error.slice(0, 200);
+        } else if (Array.isArray(errJson?.error?.details)) {
+          errorDetail = JSON.stringify(errJson.error.details).slice(0, 200);
+        }
+      } catch {
+        try {
+          errorDetail = (await response.clone().text()).slice(0, 200);
+        } catch {}
+      }
+    }
+
+    if (response.status === 409) {
       console.warn(
-        `[Cal.com Booking Diagnostic] upstream_status=400 eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone} reason="slot_unavailable"`
+        `[Cal.com Booking Diagnostic] upstream_status=409 eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone} reason="slot_conflict"${errorDetail ? ` detail="${errorDetail}"` : ""}`
       );
       return {
         status: "unavailable",
         statusCode: 409,
         booking_status: "failed",
         message: "The requested time slot is unavailable or has already been booked on Cal.com. Please choose another slot.",
+      };
+    }
+
+    if (response.status === 400) {
+      const isSlotUnavailable = /slot.*(unavailable|no longer available|already booked|not available)|time.*unavailable/i.test(
+        errorDetail
+      );
+      if (isSlotUnavailable) {
+        console.warn(
+          `[Cal.com Booking Diagnostic] upstream_status=400 eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone} reason="slot_unavailable"${errorDetail ? ` detail="${errorDetail}"` : ""}`
+        );
+        return {
+          status: "unavailable",
+          statusCode: 409,
+          booking_status: "failed",
+          message: "The requested time slot is unavailable or has already been booked on Cal.com. Please choose another slot.",
+        };
+      }
+
+      console.warn(
+        `[Cal.com Booking Diagnostic] upstream_status=400 eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone} reason="bad_request"${errorDetail ? ` detail="${errorDetail}"` : ""}`
+      );
+      return {
+        status: "error",
+        statusCode: 400,
+        booking_status: "failed",
+        message: `Booking request was rejected by Cal.com: ${errorDetail || "Invalid request payload"}.`,
       };
     }
 
@@ -1025,14 +1108,24 @@ export async function bookAppointment(
     }
 
     if (response.status === 404) {
+      let isExplicitEventTypeNotFound = false;
+      if (
+        (/event\s*type/i.test(errorDetail) || /not\s*found/i.test(errorDetail)) &&
+        !/cannot\s*(get|post)/i.test(errorDetail) &&
+        !/route/i.test(errorDetail)
+      ) {
+        isExplicitEventTypeNotFound = true;
+      }
       console.warn(
-        `[Cal.com Booking Diagnostic] upstream_status=404 eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone}`
+        `[Cal.com Booking Diagnostic] upstream_status=404 eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone}${errorDetail ? ` detail="${errorDetail}"` : ""}`
       );
       return {
         status: "error",
         statusCode: 502,
         booking_status: "failed",
-        message: `Cal.com event type '${numericEventTypeId}' was not found. Please check CALCOM_EVENT_TYPE_ID.`,
+        message: isExplicitEventTypeNotFound
+          ? `Cal.com event type '${numericEventTypeId}' was not found. Please check CALCOM_EVENT_TYPE_ID.`
+          : `Booking provider endpoint returned 404 Not Found.${errorDetail ? ` ${errorDetail.slice(0, 120)}` : ""}`,
       };
     }
 
@@ -1049,12 +1142,6 @@ export async function bookAppointment(
     }
 
     if (!response.ok) {
-      let errorDetail = "";
-      try {
-        const errJson = await response.clone().json();
-        if (errJson?.message) errorDetail = String(errJson.message).slice(0, 150);
-        else if (errJson?.error?.message) errorDetail = String(errJson.error.message).slice(0, 150);
-      } catch {}
       console.warn(
         `[Cal.com Booking Diagnostic] upstream_status=${response.status} eventTypeId=${numericEventTypeId} date=${slot_date} time=${slot_time} tz=${timezone}${errorDetail ? ` detail="${errorDetail}"` : ""}`
       );
@@ -1062,7 +1149,7 @@ export async function bookAppointment(
         status: "error",
         statusCode: 502,
         booking_status: "failed",
-        message: `Booking provider returned an error (HTTP ${response.status}). Booking could not be confirmed.`,
+        message: `Booking provider returned an error (HTTP ${response.status}).${errorDetail ? ` ${errorDetail.slice(0, 120)}` : ""}`,
       };
     }
 
