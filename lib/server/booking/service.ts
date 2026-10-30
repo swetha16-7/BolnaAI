@@ -62,6 +62,7 @@ export type BookAppointmentInput = {
   preferred_time?: string | null;
   service_type?: string | null;
   service_address?: string | null;
+  address?: string | null;
   issue_description?: string | null;
   description?: string | null;
   problem_description?: string | null;
@@ -834,12 +835,24 @@ export async function bookAppointment(
 
   const appointment_type = service_type || "Service Request";
   const property_type = input.property_type || (input as any).property || "Property";
-  const location =
+  const rawLocation =
     input.location ||
-    (input as any).city ||
-    (input as any).service_address ||
+    input.service_address ||
     (input as any).address ||
-    "Hyderabad";
+    input.city ||
+    (input as any).bookingFieldsResponses?.location?.optionValue ||
+    (input as any).bookingFieldsResponses?.location?.address ||
+    (input as any).responses?.location?.optionValue ||
+    (input as any).responses?.location?.address;
+
+  const location =
+    typeof rawLocation === "string" && rawLocation.trim()
+      ? rawLocation.trim()
+      : typeof rawLocation === "object" && (rawLocation as any)?.optionValue
+      ? String((rawLocation as any).optionValue).trim()
+      : typeof rawLocation === "object" && (rawLocation as any)?.address
+      ? String((rawLocation as any).address).trim()
+      : null;
 
   let slot_date =
     input.slot_date ||
@@ -901,6 +914,14 @@ export async function bookAppointment(
       statusCode: 400,
       booking_status: "failed",
       message: "Issue description is required for booking (e.g. AC is not cooling or leaking pipe).",
+    };
+  }
+  if (!location) {
+    return {
+      status: "error",
+      statusCode: 400,
+      booking_status: "failed",
+      message: "Location/address is required for booking (e.g. Hyderabad or 123 Main St).",
     };
   }
   if (!slot_date?.trim()) {
@@ -1068,10 +1089,14 @@ export async function bookAppointment(
       phoneNumber: phone_number.trim(),
       language: "en",
     },
+    location: {
+      type: "attendeeAddress",
+      address: location,
+    },
     bookingFieldsResponses,
     metadata: {
       phoneNumber: phone_number.trim(),
-      location: location?.trim() || "Hyderabad",
+      location,
       propertyType: property_type?.trim() || "Property",
       appointmentType: appointment_type,
       serviceType: service_type,

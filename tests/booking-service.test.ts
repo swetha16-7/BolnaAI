@@ -659,7 +659,7 @@ test("9. Validates invalid dates, timezones, and attendee information", async ()
 
   // Missing phone number in booking
   const r3 = await bookAppointment(
-    { name: "John", service_type: "AC Repair", issue_description: "AC is not cooling", slot_date: "28-10-2026", slot_time: "10:00 AM" },
+    { name: "John", service_type: "AC Repair", issue_description: "AC is not cooling", location: "Hyderabad", slot_date: "28-10-2026", slot_time: "10:00 AM" },
     { db: mockDb as any, env: VALID_CAL_ENV }
   );
   assert.equal(r3.status, "error");
@@ -672,6 +672,7 @@ test("9. Validates invalid dates, timezones, and attendee information", async ()
       phone_number: "+919876543210",
       service_type: "AC Repair",
       issue_description: "AC is not cooling",
+      location: "Hyderabad",
       email: "not-an-email-address",
       slot_date: "28-10-2026",
       slot_time: "10:00 AM",
@@ -1670,5 +1671,129 @@ test("Supports issue_description aliases (description, problem_description, cust
 
     assert.equal(result.status, "confirmed");
     assert.equal(capturedBody?.bookingFieldsResponses?.issue_description, val);
+  }
+});
+
+test("location: 'Hyderabad' is forwarded as attendeeAddress location to Cal.com while preserving service_type, issue_description, and custom fields", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  let capturedBody: any = null;
+  const mockFetcher: typeof fetch = async (_url, init) => {
+    capturedBody = JSON.parse(String(init?.body || "{}"));
+    return new Response(
+      JSON.stringify({ status: "success", data: { uid: "cal_uid_attendee_address_test" } }),
+      { status: 201, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const result = await bookAppointment(
+    {
+      name: "Swetha",
+      phone_number: "+919121998166",
+      service_type: "AC Repair",
+      issue_description: "AC is not cooling",
+      location: "Hyderabad",
+      bookingFieldsResponses: {
+        preferred_technician: "Senior Tech",
+      },
+      slot_date: "02-11-2026",
+      slot_time: "10:00 AM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+    },
+  );
+
+  assert.equal(result.status, "confirmed");
+  assert.deepStrictEqual(capturedBody?.location, {
+    type: "attendeeAddress",
+    address: "Hyderabad",
+  });
+  assert.equal(capturedBody?.bookingFieldsResponses?.service_type, "AC Repair");
+  assert.equal(capturedBody?.bookingFieldsResponses?.issue_description, "AC is not cooling");
+  assert.equal(capturedBody?.bookingFieldsResponses?.preferred_technician, "Senior Tech");
+  assert.equal(capturedBody?.metadata?.location, "Hyderabad");
+  assert.equal(capturedBody?.metadata?.serviceType, "AC Repair");
+  assert.equal(capturedBody?.metadata?.issueDescription, "AC is not cooling");
+});
+
+test("Missing location produces a clear validation error without calling Cal.com", async () => {
+  const mockDb = createMockDb();
+  let fetcherCalled = false;
+  const mockFetcher: typeof fetch = async () => {
+    fetcherCalled = true;
+    return new Response(JSON.stringify({ status: "success" }), { status: 200 });
+  };
+
+  const result = await bookAppointment(
+    {
+      name: "Swetha",
+      phone_number: "+919121998166",
+      service_type: "AC Repair",
+      issue_description: "AC is not cooling",
+      slot_date: "02-11-2026",
+      slot_time: "10:00 AM",
+    },
+    {
+      db: mockDb as any,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+    },
+  );
+
+  assert.equal(result.status, "error");
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.booking_status, "failed");
+  assert.match(result.message, /location\/address is required/i);
+  assert.equal(fetcherCalled, false);
+});
+
+test("Supports location aliases (service_address, address, city)", async () => {
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  const testCases = [
+    ["service_address", "Flat 402, Banjara Hills, Hyderabad"],
+    ["address", "Plot 12, Jubilee Hills, Hyderabad"],
+    ["city", "Hyderabad"],
+  ];
+
+  for (const [key, val] of testCases) {
+    const mockDb = createMockDb();
+    let capturedBody: any = null;
+    const mockFetcher: typeof fetch = async (_url, init) => {
+      capturedBody = JSON.parse(String(init?.body || "{}"));
+      return new Response(
+        JSON.stringify({ status: "success", data: { uid: "cal_uid_location_alias_test" } }),
+        { status: 201, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const result = await bookAppointment(
+      {
+        name: "Test Caller",
+        phone_number: "+919876543210",
+        service_type: "AC Repair",
+        issue_description: "AC is not cooling",
+        [key]: val,
+        slot_date: "02-11-2026",
+        slot_time: "11:30 AM",
+      },
+      {
+        db: mockDb as any,
+        now: simulatedNow,
+        env: VALID_CAL_ENV,
+        fetchFn: mockFetcher,
+      },
+    );
+
+    assert.equal(result.status, "confirmed");
+    assert.deepStrictEqual(capturedBody?.location, {
+      type: "attendeeAddress",
+      address: val,
+    });
   }
 });
