@@ -1152,7 +1152,7 @@ test("CALCOM_SLOTS_API_VERSION environment variable override is respected", asyn
   assert.equal(capturedVersion, "2024-09-04");
 });
 
-test("Cal.com API v2 booking uses 2024-09-04 by default, preserves attendee/schedule details, and accepts field aliases", async () => {
+test("Cal.com API v2 booking uses 2024-08-13 by default, preserves attendee/schedule details, and accepts field aliases", async () => {
   const mockDb = createMockDb();
   const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
 
@@ -1205,7 +1205,7 @@ test("Cal.com API v2 booking uses 2024-09-04 by default, preserves attendee/sche
   });
 
   // Verify headers
-  assert.equal(capturedHeaders["cal-api-version"], "2024-09-04");
+  assert.equal(capturedHeaders["cal-api-version"], "2024-08-13");
   assert.equal(capturedHeaders.authorization, "Bearer cal_live_valid_key_123");
   assert.equal(capturedUrl, "https://api.cal.com/v2/bookings");
 
@@ -1384,4 +1384,43 @@ test("Cal.com response missing booking UID is not reported as confirmed", async 
   assert.equal(result.booking_status, "failed");
   assert.match(result.message, /missing a valid booking confirmation identifier/i);
   assert.equal(mockDb._state.appointments.length, 0);
+});
+
+test("CALCOM_BOOKING_API_VERSION environment variable override is respected", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  let capturedVersion = "";
+  const mockFetcher: typeof fetch = async (_url, init) => {
+    capturedVersion = (init?.headers as any)?.["cal-api-version"];
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: { uid: "cal_uid_override_test" },
+      }),
+      { status: 201, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  await bookAppointment(
+    {
+      name: "Test User",
+      phone_number: "+919876543210",
+      slot_date: "02-11-2026",
+      slot_time: "11:30 AM",
+      location: "Hyderabad",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: {
+        CALCOM_API_KEY: "cal_live_key",
+        CALCOM_EVENT_TYPE_ID: "7283034",
+        CALCOM_BOOKING_API_VERSION: "2024-08-13",
+      },
+      fetchFn: mockFetcher,
+    },
+  );
+
+  assert.equal(capturedVersion, "2024-08-13");
 });

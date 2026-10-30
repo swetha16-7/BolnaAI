@@ -1025,7 +1025,7 @@ export async function bookAppointment(
   }
 
   try {
-    const bookingApiVersion = env.CALCOM_BOOKING_API_VERSION?.trim() || env.CALCOM_API_VERSION?.trim() || "2024-09-04";
+    const bookingApiVersion = env.CALCOM_BOOKING_API_VERSION?.trim() || "2024-08-13";
     let response = await fetcher("https://api.cal.com/v2/bookings", {
       method: "POST",
       headers: {
