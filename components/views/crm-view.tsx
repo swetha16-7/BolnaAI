@@ -385,7 +385,12 @@ export const CrmView: React.FC = () => {
       {activeTab === "bookings" && (
         <Card className="border-border/60">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6 py-4">
-            <h3 className="text-lg font-semibold">Appointments &amp; Bookings</h3>
+            <div>
+              <h3 className="text-lg font-semibold">Appointments &amp; Bookings</h3>
+              <p className="text-xs text-muted-foreground">
+                Confirmed property viewings and client consultations scheduled via Cal.com
+              </p>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -409,33 +414,73 @@ export const CrmView: React.FC = () => {
               </TableHeader>
               <TableBody>
                 {appointmentsLoading ? (
-                  <TableRow><TableCell colSpan={5} className="py-8 text-center">Loading appointments...</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+                        <span>Loading appointments...</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ) : appointmentsError ? (
-                  <TableRow><TableCell colSpan={5} role="alert" className="py-8 text-center">{appointmentsError}</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={5} role="alert" className="py-8 text-center text-destructive">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <span>{appointmentsError}</span>
+                        <Button variant="outline" size="sm" onClick={() => void loadAppointments()}>
+                          <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ) : appointments.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">No appointments have been recorded.</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <p className="font-medium text-foreground">No appointments have been recorded yet.</p>
+                        <p className="max-w-md text-xs">
+                          Appointments booked by callers via Retell AI or scheduled through Cal.com will appear here automatically.
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={() => void loadAppointments()}
+                          disabled={appointmentsLoading}
+                        >
+                          <RefreshCw className={`mr-1 h-3.5 w-3.5 ${appointmentsLoading ? "animate-spin" : ""}`} /> Check for new bookings
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ) : appointments.map((appointment) => {
-                  const location = (appointment.metadata as Record<string, unknown> | null)?.location as string | undefined;
-                  const calcomRef = appointment.calcomEventId || ((appointment.metadata as Record<string, unknown> | null)?.bookingUid as string | undefined);
+                  const meta = (appointment.metadata as Record<string, unknown> | null) ?? {};
+                  const customerName = appointment.contact
+                    ? `${appointment.contact.firstName} ${appointment.contact.lastName ?? ""}`.trim()
+                    : ((meta.customerName as string | undefined) || "Customer");
+                  const customerPhone = appointment.contact?.phone || (meta.phoneNumber as string | undefined) || null;
+                  const customerEmail = appointment.contact?.email || (meta.email as string | undefined) || null;
+                  const location = (meta.location as string | undefined) || (meta.propertyType as string | undefined);
+                  const calcomRef =
+                    appointment.calcomEventId ||
+                    (meta.calcomBookingUid as string | undefined) ||
+                    (meta.bookingUid as string | undefined);
+
                   return (
                     <TableRow key={appointment.id}>
                       <TableCell>
-                        <div className="font-medium">
-                          {appointment.contact
-                            ? `${appointment.contact.firstName} ${appointment.contact.lastName ?? ""}`.trim()
-                            : "Unlinked contact"}
-                        </div>
+                        <div className="font-medium">{customerName}</div>
                         <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-                          {appointment.contact?.phone && (
+                          {customerPhone && (
                             <span className="flex items-center gap-1">
                               <Phone className="h-3 w-3" />
-                              {appointment.contact.phone}
+                              {customerPhone}
                             </span>
                           )}
-                          {appointment.contact?.email && (
+                          {customerEmail && (
                             <span className="flex items-center gap-1">
                               <Mail className="h-3 w-3" />
-                              {appointment.contact.email}
+                              {customerEmail}
                             </span>
                           )}
                         </div>

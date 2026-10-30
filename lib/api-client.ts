@@ -204,6 +204,7 @@ export interface ApiAppointment {
   serviceName: string | null;
   calcomEventId?: string | null;
   metadata?: Record<string, any> | null;
+  createdAt?: string;
   contact: {
     id: string;
     firstName: string;

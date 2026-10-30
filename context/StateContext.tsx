@@ -711,7 +711,7 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setAppointmentsError(null);
     try {
       const result = await api.appointments.list();
-      setAppointments(result.appointments);
+      setAppointments(Array.isArray(result?.appointments) ? result.appointments : []);
     } catch (error) {
       reportLoadError(error, "Unable to load appointments.", setAppointmentsError);
     } finally {

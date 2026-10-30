@@ -54,7 +54,12 @@ export type BookAppointmentInput = {
   timezone?: string | null;
   agent_id?: string | null;
   agent_role?: string | null;
-  call?: { agent_id?: string | null; call_id?: string | null } | null;
+  call?: {
+    agent_id?: string | null;
+    call_id?: string | null;
+    from_number?: string | null;
+    customer_number?: string | null;
+  } | null;
 };
 
 export type BookAppointmentResult =
@@ -190,7 +195,19 @@ export function parseDateString(
 
 export function parseTimeString(timeStr: string | null | undefined): { hours: number; minutes: number } | null {
   if (!timeStr || typeof timeStr !== "string") return null;
-  const match = timeStr.trim().match(/^(\d{1,2})(?::(\d{2}))?(?::\d{2})?\s*(AM|PM)?$/i);
+  let cleaned = timeStr.trim();
+  // If ISO string like "2026-11-01T10:00:00Z", extract time part
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}T/i.test(cleaned)) {
+    cleaned = cleaned.split(/T/i)[1];
+  }
+  // Strip trailing timezone abbreviations like IST, EST, EDT, CST, CDT, MST, MDT, PST, PDT, UTC, GMT
+  cleaned = cleaned.replace(/\b(IST|EST|EDT|CST|CDT|MST|MDT|PST|PDT|UTC|GMT)\b/gi, "").trim();
+  // Strip trailing timezone offset like +05:30, -04:00, +0530, Z
+  cleaned = cleaned.replace(/(?:[+-]\d{2}:?\d{2}|Z)$/i, "").trim();
+  // Strip parentheses e.g. (IST)
+  cleaned = cleaned.replace(/\([^\)]*\)/g, "").trim();
+
+  const match = cleaned.match(/^(\d{1,2})(?::(\d{2}))?(?::\d{2})?\s*(AM|PM)?$/i);
   if (!match) return null;
 
   let hours = parseInt(match[1], 10);
@@ -748,14 +765,63 @@ export async function bookAppointment(
   input: BookAppointmentInput,
   options: BookingServiceOptions = {},
 ): Promise<BookAppointmentResult> {
-  const name = input.name || (input as any).customer_name || (input as any).caller_name;
-  const phone_number = input.phone_number || (input as any).phone || (input as any).caller_phone;
-  const email = input.email;
+  const name =
+    input.name ||
+    (input as any).customer_name ||
+    (input as any).caller_name ||
+    (input as any).attendee_name ||
+    (input as any).client_name;
+
+  const phone_number =
+    input.phone_number ||
+    (input as any).phoneNumber ||
+    (input as any).phone ||
+    (input as any).caller_phone ||
+    (input as any).caller_number ||
+    (input as any).attendee_phone ||
+    input.call?.from_number ||
+    input.call?.customer_number;
+
+  const email = input.email || (input as any).attendee_email || (input as any).customer_email;
   const appointment_type = input.appointment_type || (input as any).type || "Property Viewing";
-  const property_type = input.property_type || "Property";
-  const location = input.location || "Hyderabad";
-  const slot_date = input.slot_date || (input as any).date;
-  const slot_time = input.slot_time || (input as any).time;
+  const property_type = input.property_type || (input as any).property || "Property";
+  const location = input.location || (input as any).city || "Hyderabad";
+
+  let slot_date =
+    input.slot_date ||
+    (input as any).date ||
+    (input as any).booking_date ||
+    (input as any).appointment_date;
+
+  let slot_time =
+    input.slot_time ||
+    (input as any).time ||
+    (input as any).booking_time ||
+    (input as any).appointment_time ||
+    (input as any).start_time ||
+    (input as any).startTime;
+
+  // Handle combined datetime parameter if either date or time is missing
+  const rawDateTime =
+    (input as any).datetime ||
+    (input as any).dateTime ||
+    (input as any).start ||
+    (input as any).slot;
+
+  if (rawDateTime && typeof rawDateTime === "string") {
+    const dtTrimmed = rawDateTime.trim();
+    if (!slot_date && dtTrimmed.includes("T")) {
+      slot_date = dtTrimmed.split("T")[0];
+    } else if (!slot_date && dtTrimmed.includes(" ")) {
+      slot_date = dtTrimmed.split(" ")[0];
+    }
+    if (!slot_time && dtTrimmed.includes("T")) {
+      slot_time = dtTrimmed.split("T")[1];
+    } else if (!slot_time && dtTrimmed.includes(" ")) {
+      slot_time = dtTrimmed.substring(dtTrimmed.indexOf(" ") + 1);
+    }
+  }
+
   const explicitTimezone = input.timezone;
 
   // Validation
@@ -1126,6 +1192,7 @@ export async function bookAppointment(
               slotDate: slot_date,
               slotTime: slot_time,
               calcomBookingUid: String(calcomBookingUid),
+              bookingUid: String(calcomBookingUid),
               callId: input.call?.call_id || null,
             },
           },

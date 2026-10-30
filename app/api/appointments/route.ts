@@ -13,8 +13,8 @@ export async function GET() {
 
     const appointments = await prisma.appointment.findMany({
       where: organizationScope(organization.id),
-      orderBy: { startsAt: "desc" },
-      take: 25,
+      orderBy: { createdAt: "desc" },
+      take: 100,
       select: {
         id: true,
         startsAt: true,
@@ -24,6 +24,7 @@ export async function GET() {
         serviceName: true,
         calcomEventId: true,
         metadata: true,
+        createdAt: true,
         contact: {
           select: {
             id: true,
