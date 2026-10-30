@@ -62,6 +62,11 @@ export type BookAppointmentInput = {
   preferred_time?: string | null;
   service_type?: string | null;
   service_address?: string | null;
+  issue_description?: string | null;
+  description?: string | null;
+  problem_description?: string | null;
+  customer_issue?: string | null;
+  problem?: string | null;
   bookingFieldsResponses?: Record<string, any> | null;
   responses?: Record<string, any> | null;
   timezone?: string | null;
@@ -813,6 +818,20 @@ export async function bookAppointment(
       ? rawServiceType.trim()
       : null;
 
+  const rawIssueDescription =
+    input.issue_description ||
+    (input as any).description ||
+    (input as any).problem_description ||
+    (input as any).customer_issue ||
+    (input as any).problem ||
+    (input as any).bookingFieldsResponses?.issue_description ||
+    (input as any).responses?.issue_description;
+
+  const issue_description =
+    typeof rawIssueDescription === "string" && rawIssueDescription.trim()
+      ? rawIssueDescription.trim()
+      : null;
+
   const appointment_type = service_type || "Service Request";
   const property_type = input.property_type || (input as any).property || "Property";
   const location =
@@ -874,6 +893,14 @@ export async function bookAppointment(
       statusCode: 400,
       booking_status: "failed",
       message: "Service type is required for booking (e.g. AC Repair or Plumbing).",
+    };
+  }
+  if (!issue_description) {
+    return {
+      status: "error",
+      statusCode: 400,
+      booking_status: "failed",
+      message: "Issue description is required for booking (e.g. AC is not cooling or leaking pipe).",
     };
   }
   if (!slot_date?.trim()) {
@@ -1028,6 +1055,7 @@ export async function bookAppointment(
   const bookingFieldsResponses: Record<string, any> = {
     ...existingResponses,
     service_type: existingResponses.service_type || service_type,
+    issue_description: existingResponses.issue_description || issue_description,
   };
 
   const bookingBody: Record<string, any> = {
@@ -1047,6 +1075,7 @@ export async function bookAppointment(
       propertyType: property_type?.trim() || "Property",
       appointmentType: appointment_type,
       serviceType: service_type,
+      issueDescription: issue_description,
     },
   };
 
@@ -1300,6 +1329,8 @@ export async function bookAppointment(
               phoneNumber: rawPhone,
               email: email?.trim() || null,
               appointmentType: appointment_type,
+              serviceType: service_type,
+              issueDescription: issue_description,
               propertyType: property_type,
               location,
               slotDate: slot_date,
