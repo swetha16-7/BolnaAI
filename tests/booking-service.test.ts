@@ -442,6 +442,7 @@ test("4. Cal.com authentication failure returns clear error and does not report 
     {
       name: "Suresh",
       phone_number: "+919876543210",
+      service_type: "AC Repair",
       slot_date: "28-10-2026",
       slot_time: "10:00 AM",
       location: "Hyderabad",
@@ -480,6 +481,7 @@ test("5. Missing API key or event type ID returns actionable error without silen
     {
       name: "Test",
       phone_number: "+919876543210",
+      service_type: "AC Repair",
       slot_date: "28-10-2026",
       slot_time: "10:00 AM",
       location: "Hyderabad",
@@ -580,6 +582,7 @@ test("7b. Cal.com upstream HTTP 500 error returns error status without fabricati
     {
       name: "Suresh",
       phone_number: "+919876543210",
+      service_type: "AC Repair",
       slot_date: "27-10-2026",
       slot_time: "10:00 AM",
       location: "Hyderabad",
@@ -609,6 +612,7 @@ test("8. Cal.com 400 slot unavailable error marks booking as unavailable", async
   const input: BookAppointmentInput = {
     name: "Vikram",
     phone_number: "+919876543210",
+    service_type: "AC Repair",
     slot_date: "28-10-2026",
     slot_time: "10:00 AM",
     location: "Hyderabad",
@@ -650,7 +654,7 @@ test("9. Validates invalid dates, timezones, and attendee information", async ()
 
   // Missing phone number in booking
   const r3 = await bookAppointment(
-    { name: "John", slot_date: "28-10-2026", slot_time: "10:00 AM" },
+    { name: "John", service_type: "AC Repair", slot_date: "28-10-2026", slot_time: "10:00 AM" },
     { db: mockDb as any, env: VALID_CAL_ENV }
   );
   assert.equal(r3.status, "error");
@@ -661,6 +665,7 @@ test("9. Validates invalid dates, timezones, and attendee information", async ()
     {
       name: "John",
       phone_number: "+919876543210",
+      service_type: "AC Repair",
       email: "not-an-email-address",
       slot_date: "28-10-2026",
       slot_time: "10:00 AM",
@@ -695,6 +700,7 @@ test("10. Handles DB persistence failure after Cal.com confirms booking without 
   const input: BookAppointmentInput = {
     name: "Rahul",
     phone_number: "+919876543210",
+    service_type: "AC Repair",
     slot_date: "28-10-2026",
     slot_time: "10:00 AM",
     location: "Hyderabad",
@@ -747,6 +753,7 @@ test("11. Rejects duplicate booking requests for the same slot time", async () =
   const input: BookAppointmentInput = {
     name: "Pooja Reddy",
     phone_number: "+919123456789",
+    service_type: "AC Repair",
     slot_date: slotDate,
     slot_time: slotTime,
     location: "Hyderabad",
@@ -1254,6 +1261,7 @@ test("Cal.com HTTP 409 Conflict returns slot unavailable without creating databa
     {
       name: "Suresh",
       phone_number: "+919876543210",
+      service_type: "AC Repair",
       slot_date: "02-11-2026",
       slot_time: "11:30 AM",
       location: "Hyderabad",
@@ -1293,6 +1301,7 @@ test("Cal.com HTTP 400 validation error surfaces upstream message and does not r
       name: "Suresh",
       phone_number: "+919876543210",
       email: "suresh@blocked-domain.com",
+      service_type: "AC Repair",
       slot_date: "02-11-2026",
       slot_time: "11:30 AM",
       location: "Hyderabad",
@@ -1331,6 +1340,7 @@ test("Cal.com HTTP 404 Event type not found returns error and does not persist a
     {
       name: "Suresh",
       phone_number: "+919876543210",
+      service_type: "AC Repair",
       slot_date: "02-11-2026",
       slot_time: "11:30 AM",
       location: "Hyderabad",
@@ -1367,6 +1377,7 @@ test("Cal.com response missing booking UID is not reported as confirmed", async 
     {
       name: "Suresh",
       phone_number: "+919876543210",
+      service_type: "AC Repair",
       slot_date: "02-11-2026",
       slot_time: "11:30 AM",
       location: "Hyderabad",
@@ -1406,6 +1417,7 @@ test("CALCOM_BOOKING_API_VERSION environment variable override is respected", as
     {
       name: "Test User",
       phone_number: "+919876543210",
+      service_type: "AC Repair",
       slot_date: "02-11-2026",
       slot_time: "11:30 AM",
       location: "Hyderabad",
@@ -1423,4 +1435,108 @@ test("CALCOM_BOOKING_API_VERSION environment variable override is respected", as
   );
 
   assert.equal(capturedVersion, "2024-08-13");
+});
+test("appointment_type: 'AC Repair' populates the required service_type in bookingFieldsResponses", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  let capturedBody: any = null;
+  const mockFetcher: typeof fetch = async (_url, init) => {
+    capturedBody = JSON.parse(String(init?.body || "{}"));
+    return new Response(
+      JSON.stringify({ status: "success", data: { uid: "cal_uid_ac_repair_field_test" } }),
+      { status: 201, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const result = await bookAppointment(
+    {
+      name: "Ramesh Gupta",
+      phone_number: "+919876543210",
+      appointment_type: "AC Repair",
+      slot_date: "02-11-2026",
+      slot_time: "11:30 AM",
+      location: "Hyderabad",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+    },
+  );
+
+  assert.equal(result.status, "confirmed");
+  assert.equal(capturedBody?.bookingFieldsResponses?.service_type, "AC Repair");
+  assert.equal(capturedBody?.metadata?.serviceType, "AC Repair");
+});
+
+test("Explicitly supplied bookingFieldsResponses object is preserved alongside service_type", async () => {
+  const mockDb = createMockDb();
+  const simulatedNow = new Date("2026-10-26T06:00:00.000Z");
+
+  let capturedBody: any = null;
+  const mockFetcher: typeof fetch = async (_url, init) => {
+    capturedBody = JSON.parse(String(init?.body || "{}"));
+    return new Response(
+      JSON.stringify({ status: "success", data: { uid: "cal_uid_custom_fields_test" } }),
+      { status: 201, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const result = await bookAppointment(
+    {
+      name: "Priya Sharma",
+      phone_number: "+919876543210",
+      service_type: "Plumbing",
+      bookingFieldsResponses: {
+        issue_description: "Bathroom tap leaking constantly",
+        urgency: "urgent",
+      },
+      slot_date: "02-11-2026",
+      slot_time: "11:30 AM",
+      location: "Hyderabad",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+    },
+  );
+
+  assert.equal(result.status, "confirmed");
+  assert.equal(capturedBody?.bookingFieldsResponses?.service_type, "Plumbing");
+  assert.equal(capturedBody?.bookingFieldsResponses?.issue_description, "Bathroom tap leaking constantly");
+  assert.equal(capturedBody?.bookingFieldsResponses?.urgency, "urgent");
+});
+
+test("Missing service type produces a clear validation error without calling Cal.com", async () => {
+  const mockDb = createMockDb();
+  let fetcherCalled = false;
+  const mockFetcher: typeof fetch = async () => {
+    fetcherCalled = true;
+    return new Response(JSON.stringify({ status: "success" }), { status: 200 });
+  };
+
+  const result = await bookAppointment(
+    {
+      name: "Anil Kumar",
+      phone_number: "+919876543210",
+      slot_date: "02-11-2026",
+      slot_time: "11:30 AM",
+      location: "Hyderabad",
+    },
+    {
+      db: mockDb as any,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+    },
+  );
+
+  assert.equal(result.status, "error");
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.booking_status, "failed");
+  assert.match(result.message, /service type is required/i);
+  assert.equal(fetcherCalled, false);
 });

@@ -800,12 +800,20 @@ export async function bookAppointment(
     input.call?.customer_number;
 
   const email = input.email || (input as any).attendee_email || (input as any).customer_email;
-  const appointment_type =
+  const rawServiceType =
+    input.service_type ||
+    (input as any).service ||
     input.appointment_type ||
     (input as any).type ||
-    (input as any).service ||
-    (input as any).service_type ||
-    "Property Viewing";
+    (input as any).bookingFieldsResponses?.service_type ||
+    (input as any).responses?.service_type;
+
+  const service_type =
+    typeof rawServiceType === "string" && rawServiceType.trim()
+      ? rawServiceType.trim()
+      : null;
+
+  const appointment_type = service_type || "Service Request";
   const property_type = input.property_type || (input as any).property || "Property";
   const location =
     input.location ||
@@ -859,6 +867,14 @@ export async function bookAppointment(
   }
   if (!phone_number?.trim()) {
     return { status: "error", statusCode: 400, booking_status: "failed", message: "Phone number is required for booking." };
+  }
+  if (!service_type) {
+    return {
+      status: "error",
+      statusCode: 400,
+      booking_status: "failed",
+      message: "Service type is required for booking (e.g. AC Repair or Plumbing).",
+    };
   }
   if (!slot_date?.trim()) {
     return { status: "error", statusCode: 400, booking_status: "failed", message: "Appointment slot date is required (DD-MM-YYYY)." };
@@ -1000,6 +1016,20 @@ export async function bookAppointment(
 
   const cleanedDigits = phone_number.replace(/\D/g, "");
   const attendeeEmail = email?.trim() || `${cleanedDigits || "caller"}@customer.bolna.ai`;
+
+  // Preserve existing custom booking field responses and ensure required service_type is populated
+  const existingResponses =
+    ((input as any).bookingFieldsResponses && typeof (input as any).bookingFieldsResponses === "object"
+      ? (input as any).bookingFieldsResponses
+      : (input as any).responses && typeof (input as any).responses === "object"
+      ? (input as any).responses
+      : {}) || {};
+
+  const bookingFieldsResponses: Record<string, any> = {
+    ...existingResponses,
+    service_type: existingResponses.service_type || service_type,
+  };
+
   const bookingBody: Record<string, any> = {
     eventTypeId: numericEventTypeId,
     start: startsAt.toISOString(),
@@ -1010,19 +1040,15 @@ export async function bookAppointment(
       phoneNumber: phone_number.trim(),
       language: "en",
     },
+    bookingFieldsResponses,
     metadata: {
       phoneNumber: phone_number.trim(),
       location: location?.trim() || "Hyderabad",
       propertyType: property_type?.trim() || "Property",
-      appointmentType: appointment_type?.trim() || "Property Viewing",
+      appointmentType: appointment_type,
+      serviceType: service_type,
     },
   };
-
-  if ((input as any).bookingFieldsResponses && typeof (input as any).bookingFieldsResponses === "object") {
-    bookingBody.bookingFieldsResponses = (input as any).bookingFieldsResponses;
-  } else if ((input as any).responses && typeof (input as any).responses === "object") {
-    bookingBody.bookingFieldsResponses = (input as any).responses;
-  }
 
   try {
     const bookingApiVersion = env.CALCOM_BOOKING_API_VERSION?.trim() || "2024-08-13";
