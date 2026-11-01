@@ -1911,7 +1911,6 @@ export async function rescheduleAppointment(
 
   const rescheduleBody = {
     start: startsAt.toISOString(),
-    lengthInMinutes: durationMinutes,
     reschedulingReason,
   };
 

@@ -20,6 +20,8 @@ const retellWebhookSchema = z.object({
     to_number: z.string().max(100).optional(),
     metadata: z.unknown().optional(),
     disconnection_reason: z.string().max(200).optional(),
+    transfer_destination: z.string().max(200).nullable().optional(),
+    transfer_end_timestamp: z.number().finite().int().min(0).max(MAX_TIMESTAMP_MS).optional(),
     start_timestamp: z.number().finite().int().min(0).max(MAX_TIMESTAMP_MS).optional(),
     end_timestamp: z.number().finite().int().min(0).max(MAX_TIMESTAMP_MS).optional(),
     duration_ms: z.number().finite().int().min(0).max(MAX_DURATION_MS).optional(),
@@ -259,6 +261,7 @@ export async function synchronizeRetellCallEvent(
       disconnectionReason: call.disconnection_reason ?? null,
       startTimestamp: call.start_timestamp ?? null,
       endTimestamp: call.end_timestamp ?? null,
+      ...(call.transfer_destination ? { transferDestination: call.transfer_destination } : {}),
     },
   });
   if (!created) {
@@ -304,6 +307,25 @@ export function getRetellWebhookCallUpdate(
     }
   }
 
+  const isFailed = mappedStatus === "failed";
+  const failureCode = isFailed
+    ? (call.disconnection_reason ?? "provider_call_failed")
+    : undefined;
+  const failureMessage = isFailed
+    ? (call.disconnection_reason === "transfer_failed"
+        ? "Call transfer failed to connect to destination."
+        : call.disconnection_reason === "transfer_cancelled"
+          ? "Call transfer was cancelled."
+          : "The provider reported that the call did not connect.")
+    : undefined;
+
+  let outcome = call.call_analysis?.call_summary;
+  if (!outcome && call.disconnection_reason === "call_transfer") {
+    outcome = call.transfer_destination
+      ? `Call successfully transferred to ${call.transfer_destination}.`
+      : "Call successfully transferred to human agent.";
+  }
+
   return {
     ...(statusCanAdvance && mappedStatus ? { status: mappedStatus } : {}),
     ...(call.direction ? { direction: call.direction } : {}),
@@ -317,16 +339,9 @@ export function getRetellWebhookCallUpdate(
       : {}),
     ...(durationSeconds !== undefined ? { durationSeconds } : {}),
     ...(call.transcript !== undefined ? { transcript: call.transcript } : {}),
-    ...(call.call_analysis?.call_summary
-      ? { outcome: call.call_analysis.call_summary }
-      : {}),
+    ...(outcome ? { outcome } : {}),
     ...(safeRecordingUrl ? { recordingUrl: safeRecordingUrl } : {}),
-    ...(mappedStatus === "failed"
-      ? {
-          failureCode: call.disconnection_reason ?? "provider_call_failed",
-          failureMessage: "The provider reported that the call did not connect.",
-        }
-      : {}),
+    ...(isFailed ? { failureCode, failureMessage } : {}),
   };
 }
 

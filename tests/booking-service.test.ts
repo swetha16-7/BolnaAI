@@ -1913,6 +1913,9 @@ test("rescheduleAppointment: Option A caller identification with 1 upcoming appo
   assert.equal(result.booking_uid, "cal_uid_rescheduled_456");
   assert.equal(capturedUrl, "https://api.cal.com/v2/bookings/cal_uid_initial_123/reschedule");
   assert.equal(capturedBody.reschedulingReason, "Rescheduled via Boomi Solutions AI Voice Assistant");
+  assert.equal(capturedBody.lengthInMinutes, undefined, "reschedule payload must NOT contain lengthInMinutes");
+  assert.equal("lengthInMinutes" in capturedBody, false, "lengthInMinutes field must be omitted from Cal.com request");
+  assert.equal(capturedBody.start, "2026-11-05T09:30:00.000Z", "start time must be sent in UTC ISO-8601 format");
 
   // Verify database record was updated in place and preserved existing customer/service details
   const updated = mockDb._state.appointments.find((a) => a.id === "appt-resched-1");

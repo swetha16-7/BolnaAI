@@ -121,23 +121,42 @@ export function mapRetellCallStatus(
     if (callStatus === "error" || callStatus === "not_connected") return "failed";
     return "initiated";
   }
-  if (event === "call_started") return "in_progress";
+  if (event === "call_started" || event === "transfer_started" || event === "transfer_bridged") {
+    return "in_progress";
+  }
+  if (event === "transfer_cancelled") {
+    return callStatus === "ended" ? "failed" : "in_progress";
+  }
   if (event === "call_ended") {
     if (
       callStatus === "error" ||
       callStatus === "not_connected" ||
-      ["dial_failed", "dial_no_answer", "dial_busy"].includes(disconnectionReason ?? "")
+      [
+        "dial_failed",
+        "dial_no_answer",
+        "dial_busy",
+        "transfer_failed",
+        "provider_error",
+      ].includes(disconnectionReason ?? "")
     ) {
       return "failed";
     }
     return "completed";
   }
-  if (callStatus === "ongoing") return "in_progress";
+  if (callStatus === "ongoing" || callStatus === "transferring" || callStatus === "bridged") {
+    return "in_progress";
+  }
   if (callStatus === "registered") return "initiated";
   if (callStatus === "error" || callStatus === "not_connected") return "failed";
   if (callStatus === "ended") {
     if (
-      ["dial_failed", "dial_no_answer", "dial_busy"].includes(disconnectionReason ?? "")
+      [
+        "dial_failed",
+        "dial_no_answer",
+        "dial_busy",
+        "transfer_failed",
+        "provider_error",
+      ].includes(disconnectionReason ?? "")
     ) {
       return "failed";
     }
@@ -190,4 +209,43 @@ export function isActiveCallStatus(status: string): boolean {
 export function isDestinationAllowed(phone: string, allowedCountries: string[]): boolean {
   const parsed = parsePhoneNumberFromString(phone);
   return Boolean(parsed?.isValid() && parsed.country && allowedCountries.includes(parsed.country));
+}
+
+export type TransferDestinationValidationResult = {
+  valid: boolean;
+  formattedNumber?: string;
+  country?: string;
+  error?: string;
+};
+
+export function validateTransferDestination(
+  destination: string,
+  allowedCountries: string[] = ["US", "IN"],
+): TransferDestinationValidationResult {
+  if (!destination || typeof destination !== "string" || !destination.trim()) {
+    return { valid: false, error: "Transfer destination number is required." };
+  }
+  const trimmed = destination.trim();
+  if (trimmed.toLowerCase().startsWith("sip:")) {
+    return { valid: true, formattedNumber: trimmed };
+  }
+  const parsed = parsePhoneNumberFromString(trimmed);
+  if (!parsed || !parsed.isValid()) {
+    return {
+      valid: false,
+      error: `Transfer destination '${trimmed}' is not a valid E.164 phone number. Include country code (e.g. +91 for India, +1 for US).`,
+    };
+  }
+  if (parsed.country && !allowedCountries.includes(parsed.country)) {
+    return {
+      valid: false,
+      country: parsed.country,
+      error: `Transfer to country '${parsed.country}' is not allowed by policy. Allowed countries: ${allowedCountries.join(", ")}.`,
+    };
+  }
+  return {
+    valid: true,
+    formattedNumber: parsed.format("E.164"),
+    country: parsed.country,
+  };
 }
