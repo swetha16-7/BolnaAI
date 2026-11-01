@@ -1013,6 +1013,7 @@ export async function bookAppointment(
   // Resolve organization and check local DB for duplicate/conflict before calling Cal.com
   const db = options.db ?? defaultPrisma;
   let organizationId: string | null = options.organizationId ?? null;
+  let resolvedAgentId: string | null = null;
   const retellAgentId = input.agent_id || input.call?.agent_id;
 
   if (retellAgentId && db?.providerLink?.findFirst) {
@@ -1023,6 +1024,22 @@ export async function bookAppointment(
       });
       if (link?.agent?.organizationId) {
         organizationId = link.agent.organizationId;
+        resolvedAgentId = link.agent.id;
+      }
+    } catch {}
+  }
+
+  if (!resolvedAgentId && retellAgentId && db?.agent?.findFirst) {
+    try {
+      const localAgent = await db.agent.findFirst({
+        where: { id: retellAgentId },
+        select: { id: true, organizationId: true },
+      });
+      if (localAgent) {
+        resolvedAgentId = localAgent.id;
+        if (!organizationId) {
+          organizationId = localAgent.organizationId;
+        }
       }
     } catch {}
   }
@@ -1341,7 +1358,7 @@ export async function bookAppointment(
           data: {
             organizationId,
             contactId: contact.id,
-            agentId: retellAgentId ?? null,
+            agentId: resolvedAgentId ?? null,
             status: "confirmed",
             startsAt,
             endsAt,
@@ -1363,6 +1380,7 @@ export async function bookAppointment(
               calcomBookingUid: String(calcomBookingUid),
               bookingUid: String(calcomBookingUid),
               callId: input.call?.call_id || null,
+              retellAgentId: retellAgentId || null,
             },
           },
         });

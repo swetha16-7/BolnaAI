@@ -23,11 +23,11 @@ function formatDuration(seconds: number | null) {
 
 function mapRetellCall(
   call: ApiRetellCall,
-  agents: Array<{ id: string; retellAgentId: string; languages: string[] }> = [],
+  agents: Array<{ id: string; name?: string; retellAgentId: string; languages: string[] }> = [],
 ): RetellDisplayCall {
   const timestamp = call.startTimestamp ?? call.endTimestamp;
   const mappedAgent = agents.find(
-    (agent) => agent.retellAgentId === call.agentId || agent.id === call.agentId,
+    (agent) => (agent.retellAgentId && agent.retellAgentId === call.agentId) || agent.id === call.agentId,
   );
   return {
     id: `retell-${call.callId}`,
@@ -37,7 +37,7 @@ function mapRetellCall(
       : call.toNumber ?? call.fromNumber ?? "Unknown caller",
     direction: call.direction ?? "Not recorded",
     agentId: call.agentId,
-    agentName: call.agentName,
+    agentName: mappedAgent?.name ?? "Unassigned",
     language: mappedAgent?.languages?.[0] ?? "English",
     duration: formatDuration(call.durationSeconds),
     outcome: call.summary ?? call.status,

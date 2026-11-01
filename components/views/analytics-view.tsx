@@ -42,25 +42,61 @@ export const AnalyticsView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
+  const [selectedAgentId, setSelectedAgentId] = useState<string>("");
+
+  const activeAgents = useMemo(() => agents.filter((a) => a.status === "active"), [agents]);
+
+  // Synchronize selectedAgentId if the selected agent was deleted or deactivated
+  useEffect(() => {
+    if (selectedAgentId && !activeAgents.some((a) => a.id === selectedAgentId)) {
+      setSelectedAgentId("");
+    }
+  }, [activeAgents, selectedAgentId]);
+
+  const filteredActiveAgents = useMemo(() => {
+    if (selectedAgentId) {
+      return activeAgents.filter((a) => a.id === selectedAgentId);
+    }
+    return activeAgents;
+  }, [activeAgents, selectedAgentId]);
+
+  const targetAgentIds = useMemo(
+    () => new Set(filteredActiveAgents.map((a) => a.id)),
+    [filteredActiveAgents],
+  );
+  const targetRetellAgentIds = useMemo(
+    () => new Set(filteredActiveAgents.filter((a) => a.retellAgentId).map((a) => a.retellAgentId)),
+    [filteredActiveAgents],
+  );
 
   const fetchCalls = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.retellCalls.list(new URLSearchParams({ pageSize: "100" }));
+      const params = new URLSearchParams({ pageSize: "100" });
+      if (selectedAgentId) {
+        params.set("agentId", selectedAgentId);
+      }
+      const result = await api.retellCalls.list(params);
       setRetellCalls(result.calls);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load Retell analytics data.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedAgentId]);
 
   useEffect(() => {
     let cancelled = false;
-    const loadInitial = async () => {
+    const loadCalls = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        const result = await api.retellCalls.list(new URLSearchParams({ pageSize: "100" }));
+        const params = new URLSearchParams({ pageSize: "100" });
+        if (selectedAgentId) {
+          params.set("agentId", selectedAgentId);
+        }
+        const result = await api.retellCalls.list(params);
         if (!cancelled) {
           setRetellCalls(result.calls);
         }
@@ -74,11 +110,11 @@ export const AnalyticsView: React.FC = () => {
         }
       }
     };
-    void loadInitial();
+    void loadCalls();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedAgentId]);
 
   // 1. Strict deduplication of calls by unique callId
   const uniqueCalls = useMemo(() => {
@@ -91,15 +127,31 @@ export const AnalyticsView: React.FC = () => {
     return Array.from(map.values());
   }, [retellCalls]);
 
-  // 2. High-level KPI computations from deduplicated data
-  const kpis = useMemo(() => {
-    const totalCalls = uniqueCalls.length > 0 ? uniqueCalls.length : (dashboard?.metrics.totalCalls ?? 0);
-    const completedCalls = uniqueCalls.filter((c) => c.status === "completed").length;
-    const conversionRate = uniqueCalls.length > 0
-      ? ((completedCalls / uniqueCalls.length) * 100).toFixed(1)
-      : "100.0";
+  // Scope calls strictly to the active agent(s) by ID relationship. Exclude deleted agents.
+  const activeAgentCalls = useMemo(() => {
+    if (targetAgentIds.size === 0 && targetRetellAgentIds.size === 0) {
+      return [];
+    }
+    return uniqueCalls.filter((call) => {
+      return (
+        (call.agentId && targetRetellAgentIds.has(call.agentId)) ||
+        (call.agentId && targetAgentIds.has(call.agentId))
+      );
+    });
+  }, [uniqueCalls, targetAgentIds, targetRetellAgentIds]);
 
-    const callsWithDuration = uniqueCalls.filter(
+  // 2. High-level KPI computations strictly from active agent calls
+  const kpis = useMemo(() => {
+    const hasActiveAgents = activeAgents.length > 0;
+    const totalCalls = hasActiveAgents
+      ? (activeAgentCalls.length > 0 ? activeAgentCalls.length : (dashboard?.metrics.totalCalls ?? 0))
+      : 0;
+    const completedCalls = activeAgentCalls.filter((c) => c.status === "completed").length;
+    const conversionRate = activeAgentCalls.length > 0
+      ? ((completedCalls / activeAgentCalls.length) * 100).toFixed(1)
+      : (totalCalls > 0 ? "100.0" : "0.0");
+
+    const callsWithDuration = activeAgentCalls.filter(
       (c) => typeof c.durationSeconds === "number" && c.durationSeconds > 0,
     );
     const totalDurationSeconds = callsWithDuration.reduce(
@@ -121,7 +173,7 @@ export const AnalyticsView: React.FC = () => {
       avgDuration: formattedDuration,
       activeChannels: activeCalls.length,
     };
-  }, [uniqueCalls, dashboard, activeCalls]);
+  }, [activeAgentCalls, activeAgents.length, dashboard, activeCalls]);
 
   // 3. Calls Per Day (Strictly 14 unique calendar days)
   const callsPerDayData = useMemo(() => {
@@ -133,7 +185,7 @@ export const AnalyticsView: React.FC = () => {
       dayMap.set(key, 0);
     }
 
-    for (const call of uniqueCalls) {
+    for (const call of activeAgentCalls) {
       const timestamp = call.startTimestamp ?? call.endTimestamp;
       if (timestamp) {
         const key = new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -147,22 +199,22 @@ export const AnalyticsView: React.FC = () => {
       date,
       calls,
     }));
-  }, [uniqueCalls]);
+  }, [activeAgentCalls]);
 
   // 4. Calls Per Language (Strictly unique language names with no duplicate keys)
   const callsPerLangData = useMemo(() => {
     const langMap = new Map<string, number>();
 
-    for (const call of uniqueCalls) {
-      const mappedAgent = agents.find(
-        (a) => a.retellAgentId === call.agentId || a.id === call.agentId || a.name === call.agentName,
+    for (const call of activeAgentCalls) {
+      const mappedAgent = filteredActiveAgents.find(
+        (a) => (a.retellAgentId && a.retellAgentId === call.agentId) || a.id === call.agentId,
       );
       const lang = mappedAgent?.languages?.[0] ?? "English";
       langMap.set(lang, (langMap.get(lang) ?? 0) + 1);
     }
 
     if (langMap.size === 0) {
-      for (const agent of agents) {
+      for (const agent of filteredActiveAgents) {
         for (const lang of agent.languages ?? ["English"]) {
           langMap.set(lang, (langMap.get(lang) ?? 0) + 1);
         }
@@ -170,7 +222,7 @@ export const AnalyticsView: React.FC = () => {
     }
 
     if (langMap.size === 0) {
-      langMap.set("English", 1);
+      langMap.set("English", 0);
     }
 
     return Array.from(langMap.entries()).map(([name, value], index) => ({
@@ -178,7 +230,7 @@ export const AnalyticsView: React.FC = () => {
       value,
       color: COLOR_PALETTE[index % COLOR_PALETTE.length],
     }));
-  }, [uniqueCalls, agents]);
+  }, [activeAgentCalls, filteredActiveAgents]);
 
   // 5. Peak Calling Hours (Strictly 12 unique 2-hour buckets)
   const peakHoursData = useMemo(() => {
@@ -187,7 +239,7 @@ export const AnalyticsView: React.FC = () => {
       hourMap.set(`${h}:00`, 0);
     }
 
-    for (const call of uniqueCalls) {
+    for (const call of activeAgentCalls) {
       const timestamp = call.startTimestamp ?? call.endTimestamp;
       if (timestamp) {
         const hour = new Date(timestamp).getHours();
@@ -202,7 +254,7 @@ export const AnalyticsView: React.FC = () => {
       hour,
       load,
     }));
-  }, [uniqueCalls]);
+  }, [activeAgentCalls]);
 
   // 6. Average Duration Trend (Strictly 5 unique week buckets)
   const avgDurationData = useMemo(() => {
@@ -213,7 +265,7 @@ export const AnalyticsView: React.FC = () => {
 
     const msPerWeek = 7 * 24 * 60 * 60 * 1000;
 
-    for (const call of uniqueCalls) {
+    for (const call of activeAgentCalls) {
       const timestamp = call.startTimestamp ?? call.endTimestamp;
       if (timestamp && typeof call.durationSeconds === "number" && call.durationSeconds > 0) {
         const diffWeeks = Math.floor((now - timestamp) / msPerWeek);
@@ -232,7 +284,7 @@ export const AnalyticsView: React.FC = () => {
       week,
       minutes: stats.count > 0 ? Number((stats.totalSeconds / stats.count / 60).toFixed(2)) : 0,
     }));
-  }, [uniqueCalls, now]);
+  }, [activeAgentCalls, now]);
 
   // 7. Missed / Failed Calls Trend (Strictly 5 unique week buckets)
   const missedCallsData = useMemo(() => {
@@ -243,7 +295,7 @@ export const AnalyticsView: React.FC = () => {
 
     const msPerWeek = 7 * 24 * 60 * 60 * 1000;
 
-    for (const call of uniqueCalls) {
+    for (const call of activeAgentCalls) {
       const timestamp = call.startTimestamp ?? call.endTimestamp;
       if (timestamp) {
         const diffWeeks = Math.floor((now - timestamp) / msPerWeek);
@@ -264,38 +316,32 @@ export const AnalyticsView: React.FC = () => {
       week,
       rate: stats.total > 0 ? Number(((stats.failed / stats.total) * 100).toFixed(1)) : 0,
     }));
-  }, [uniqueCalls, now]);
+  }, [activeAgentCalls, now]);
 
-  // 8. Agent Performance (Strictly unique agent names for current non-deleted agents)
+  // 8. Agent Performance (Strictly unique agent names for current non-deleted active agents)
   const agentPerformanceData = useMemo(() => {
-    const currentAgentNames = new Set(agents.map((a) => a.name));
     const agentMap = new Map<string, { total: number; completed: number }>();
 
-    for (const call of uniqueCalls) {
-      const name = call.agentName || "Agent";
-      // Exclude deleted agents from current agent comparisons
-      if (currentAgentNames.size > 0 && !currentAgentNames.has(name)) {
-        continue;
-      }
-      const existing = agentMap.get(name) ?? { total: 0, completed: 0 };
-      existing.total += 1;
-      if (call.status === "completed") {
-        existing.completed += 1;
-      }
-      agentMap.set(name, existing);
+    for (const agent of filteredActiveAgents) {
+      agentMap.set(agent.name, { total: 0, completed: 0 });
     }
 
-    for (const agent of agents) {
-      if (!agentMap.has(agent.name)) {
-        agentMap.set(agent.name, {
-          total: agent.callsToday ?? 0,
-          completed: agent.callsToday ?? 0,
-        });
+    for (const call of activeAgentCalls) {
+      const mappedAgent = filteredActiveAgents.find(
+        (a) => (a.retellAgentId && a.retellAgentId === call.agentId) || a.id === call.agentId,
+      );
+      if (!mappedAgent) continue;
+
+      const stats = agentMap.get(mappedAgent.name) ?? { total: 0, completed: 0 };
+      stats.total += 1;
+      if (call.status === "completed") {
+        stats.completed += 1;
       }
+      agentMap.set(mappedAgent.name, stats);
     }
 
     if (agentMap.size === 0) {
-      agentMap.set("Default Agent", { total: 0, completed: 0 });
+      return [];
     }
 
     return Array.from(agentMap.entries()).map(([name, stats]) => ({
@@ -303,7 +349,7 @@ export const AnalyticsView: React.FC = () => {
       "Success Rate (%)": stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 100,
       "Total Calls": stats.total,
     }));
-  }, [uniqueCalls, agents]);
+  }, [activeAgentCalls, filteredActiveAgents]);
 
   // Custom Tooltip with strict deduplication of entries by metric name
   const renderTooltip = (props: TooltipContentProps) => {
@@ -343,15 +389,32 @@ export const AnalyticsView: React.FC = () => {
             Real-time business intelligence regarding call rates, language distribution, peak load and success metrics.
           </p>
         </div>
-        <button
-          className="secondary-btn btn-sm"
-          disabled={loading}
-          onClick={() => void fetchCalls()}
-          style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          {loading ? "Refreshing..." : "Refresh Analytics"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {activeAgents.length > 0 && (
+            <select
+              aria-label="Filter analytics by agent"
+              className="rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+              value={selectedAgentId}
+              onChange={(e) => setSelectedAgentId(e.target.value)}
+            >
+              <option value="">All Active Agents</option>
+              {activeAgents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            className="secondary-btn btn-sm"
+            disabled={loading}
+            onClick={() => void fetchCalls()}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            {loading ? "Refreshing..." : "Refresh Analytics"}
+          </button>
+        </div>
       </div>
 
       {error && (

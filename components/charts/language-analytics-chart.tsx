@@ -11,8 +11,9 @@ export function LanguageAnalyticsChart() {
   const { agents } = useAppState();
 
   const data = useMemo(() => {
+    const activeAgents = agents.filter((a) => a.status === "active");
     const langMap = new Map<string, number>();
-    for (const agent of agents) {
+    for (const agent of activeAgents) {
       const langs = agent.languages && agent.languages.length > 0 ? agent.languages : ["English"];
       for (const lang of langs) {
         const normalized = lang.trim();

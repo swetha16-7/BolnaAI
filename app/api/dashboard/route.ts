@@ -5,17 +5,50 @@ import { apiErrorResponse } from "@/lib/server/http";
 import { organizationScope } from "@/lib/server/auth/tenant-scope";
 import { callSummarySelect } from "@/lib/server/selects";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { organization } = await requireOrganizationAccess();
+    const url = new URL(request.url);
+    const requestedAgentId = url.searchParams.get("agentId")?.trim();
+
     const now = new Date();
     const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const firstDay = new Date(startOfToday);
     firstDay.setUTCDate(firstDay.getUTCDate() - 6);
 
+    // 1. Resolve currently active agent(s) within the tenant
+    const activeAgentsList = await prisma.agent.findMany({
+      where: {
+        ...organizationScope(organization.id),
+        status: "active",
+      },
+      select: { id: true, name: true },
+    });
+
+    let targetAgentIds: string[] = [];
+    if (requestedAgentId) {
+      const targetAgent = await prisma.agent.findFirst({
+        where: {
+          ...organizationScope(organization.id),
+          id: requestedAgentId,
+        },
+        select: { id: true },
+      });
+      if (targetAgent) {
+        targetAgentIds = [targetAgent.id];
+      }
+    } else {
+      targetAgentIds = activeAgentsList.map((a) => a.id);
+    }
+
+    // Scope current-agent call statistics strictly to the active agent(s).
+    // Historical calls from deleted agents (where agentId = null or deleted ID) are excluded.
+    const agentCallScope = targetAgentIds.length > 0
+      ? { agentId: { in: targetAgentIds } }
+      : { agentId: "__none_active__" };
+
     const [
       callsToday,
-      activeAgents,
       totalAgents,
       pausedAgents,
       successfulCalls,
@@ -28,10 +61,11 @@ export async function GET() {
       totalCalls,
     ] = await Promise.all([
       prisma.call.count({
-        where: { ...organizationScope(organization.id), createdAt: { gte: startOfToday } },
-      }),
-      prisma.agent.count({
-        where: { ...organizationScope(organization.id), status: "active" },
+        where: {
+          ...organizationScope(organization.id),
+          ...agentCallScope,
+          createdAt: { gte: startOfToday },
+        },
       }),
       prisma.agent.count({
         where: organizationScope(organization.id),
@@ -40,31 +74,57 @@ export async function GET() {
         where: { ...organizationScope(organization.id), status: "paused" },
       }),
       prisma.call.count({
-        where: { ...organizationScope(organization.id), status: "completed" },
+        where: {
+          ...organizationScope(organization.id),
+          ...agentCallScope,
+          status: "completed",
+        },
       }),
       prisma.call.count({
-        where: { ...organizationScope(organization.id), status: { in: ["failed", "canceled", "error"] } },
+        where: {
+          ...organizationScope(organization.id),
+          ...agentCallScope,
+          status: { in: ["failed", "canceled", "error"] },
+        },
       }),
       prisma.contact.count({ where: organizationScope(organization.id) }),
-      prisma.appointment.count({ where: organizationScope(organization.id) }),
+      prisma.appointment.count({
+        where: {
+          ...organizationScope(organization.id),
+          ...agentCallScope,
+        },
+      }),
       prisma.call.findMany({
-        where: organizationScope(organization.id),
+        where: {
+          ...organizationScope(organization.id),
+          ...agentCallScope,
+        },
         select: callSummarySelect,
         orderBy: { createdAt: "desc" },
         take: 5,
       }),
       prisma.call.findMany({
-        where: { ...organizationScope(organization.id), createdAt: { gte: firstDay } },
+        where: {
+          ...organizationScope(organization.id),
+          ...agentCallScope,
+          createdAt: { gte: firstDay },
+        },
         select: { createdAt: true, direction: true },
       }),
       prisma.call.aggregate({
         where: {
           ...organizationScope(organization.id),
+          ...agentCallScope,
           durationSeconds: { not: null },
         },
         _avg: { durationSeconds: true },
       }),
-      prisma.call.count({ where: organizationScope(organization.id) }),
+      prisma.call.count({
+        where: {
+          ...organizationScope(organization.id),
+          ...agentCallScope,
+        },
+      }),
     ]);
 
     const callsByDay = Array.from({ length: 7 }, (_, index) => {
@@ -85,7 +145,7 @@ export async function GET() {
     return NextResponse.json({
       metrics: {
         callsToday,
-        activeAgents,
+        activeAgents: activeAgentsList.length,
         totalAgents,
         pausedAgents,
         successfulCalls,

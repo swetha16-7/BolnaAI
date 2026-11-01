@@ -67,13 +67,19 @@ export async function GET(request: Request) {
       statusFilter = status;
     }
 
+    const agentFilterObj: Record<string, unknown> = {};
+    if (status === "active" && !agentId) {
+      agentFilterObj.status = "active";
+    }
+    if (language) {
+      agentFilterObj.languages = { has: language };
+    }
+
     const where = {
       ...organizationScope(organization.id),
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(agentId ? { agentId } : {}),
-      ...(language
-        ? { agent: { is: { languages: { has: language } } } }
-        : {}),
+      ...(Object.keys(agentFilterObj).length > 0 ? { agent: { is: agentFilterObj } } : {}),
       ...(query
         ? {
             OR: [
