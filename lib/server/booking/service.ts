@@ -111,6 +111,67 @@ export type BookAppointmentResult =
       message: string;
     };
 
+export type RescheduleAppointmentInput = {
+  booking_uid?: string | null;
+  calcom_event_id?: string | null;
+  calcomEventId?: string | null;
+  booking_id?: string | null;
+  booking_reference?: string | null;
+  appointment_id?: string | null;
+  phone_number?: string | null;
+  phoneNumber?: string | null;
+  phone?: string | null;
+  caller_number?: string | null;
+  slot_date?: string | null;
+  slot_time?: string | null;
+  date?: string | null;
+  time?: string | null;
+  new_date?: string | null;
+  new_time?: string | null;
+  preferred_date?: string | null;
+  preferred_time?: string | null;
+  timezone?: string | null;
+  rescheduling_reason?: string | null;
+  reason?: string | null;
+  agent_id?: string | null;
+  call?: {
+    agent_id?: string | null;
+    call_id?: string | null;
+    from_number?: string | null;
+    customer_number?: string | null;
+  } | null;
+};
+
+export type RescheduleAppointmentResult =
+  | {
+      status: "confirmed";
+      statusCode?: number;
+      booking_status: "confirmed";
+      booking_id: string;
+      booking_uid: string;
+      booking_reference?: string;
+      warning?: string;
+      start_time: string;
+      end_time: string;
+      duration_minutes: number;
+      title: string;
+      location: string;
+      meeting_url: string;
+      message: string;
+    }
+  | {
+      status: "unavailable";
+      statusCode?: number;
+      booking_status: "failed";
+      message: string;
+    }
+  | {
+      status: "error";
+      statusCode?: number;
+      booking_status: "failed";
+      message: string;
+    };
+
 export type TakeMessageInput = {
   name?: string | null;
   phone_number?: string | null;
@@ -1452,6 +1513,692 @@ export async function bookAppointment(
     location: location?.trim() || "Hyderabad",
     meeting_url: meetingUrl,
     message: `Your ${appointment_type || "viewing"} has been successfully booked for ${slot_date.trim()} at ${slot_time.trim()} in ${location?.trim() || "Hyderabad"}.`,
+  };
+}
+
+export function phoneNumbersMatch(p1?: string | null, p2?: string | null): boolean {
+  if (!p1 || !p2) return false;
+  const s1 = String(p1).trim();
+  const s2 = String(p2).trim();
+  if (!s1 || !s2) return false;
+  if (s1 === s2) return true;
+  const d1 = s1.replace(/\D/g, "");
+  const d2 = s2.replace(/\D/g, "");
+  if (!d1 || !d2) return false;
+  if (d1 === d2) return true;
+  if (d1.length >= 10 && d2.length >= 10) {
+    return d1.slice(-10) === d2.slice(-10);
+  }
+  if (d1.length >= 7 && d2.length >= 7) {
+    return d1.endsWith(d2) || d2.endsWith(d1);
+  }
+  return false;
+}
+
+export async function rescheduleAppointment(
+  rawInput: RescheduleAppointmentInput,
+  options: BookingServiceOptions = {},
+): Promise<RescheduleAppointmentResult> {
+  const input = (rawInput && typeof rawInput === "object" ? rawInput : {}) as RescheduleAppointmentInput;
+
+  const rawBookingUid =
+    input.booking_uid ||
+    input.booking_reference ||
+    input.calcom_event_id ||
+    input.calcomEventId ||
+    input.booking_id ||
+    null;
+
+  const rawPhone =
+    input.phone_number ||
+    input.phoneNumber ||
+    input.phone ||
+    input.caller_number ||
+    input.call?.from_number ||
+    input.call?.customer_number ||
+    null;
+
+  const slot_date =
+    input.slot_date ||
+    input.new_date ||
+    input.date ||
+    input.preferred_date ||
+    null;
+
+  const slot_time =
+    input.slot_time ||
+    input.new_time ||
+    input.time ||
+    input.preferred_time ||
+    null;
+
+  const reschedulingReason =
+    input.rescheduling_reason?.trim() ||
+    input.reason?.trim() ||
+    "Rescheduled via Boomi Solutions AI Voice Assistant";
+
+  if (!slot_date?.trim()) {
+    return {
+      status: "error",
+      statusCode: 400,
+      booking_status: "failed",
+      message: "New appointment slot date is required (DD-MM-YYYY).",
+    };
+  }
+  if (!slot_time?.trim()) {
+    return {
+      status: "error",
+      statusCode: 400,
+      booking_status: "failed",
+      message: "New appointment slot time is required (e.g. 10:00 AM).",
+    };
+  }
+
+  const now = options.now ?? new Date();
+  const parsedDate = parseDateString(slot_date, now);
+  if (!parsedDate) {
+    return {
+      status: "error",
+      statusCode: 400,
+      booking_status: "failed",
+      message: `Invalid slot_date: '${slot_date}'. Expected format is DD-MM-YYYY.`,
+    };
+  }
+
+  const parsedTime = parseTimeString(slot_time);
+  if (!parsedTime) {
+    return {
+      status: "error",
+      statusCode: 400,
+      booking_status: "failed",
+      message: `Invalid slot_time: '${slot_time}'. Expected format like 10:00 AM or 04:00 PM.`,
+    };
+  }
+
+  const db = options.db ?? defaultPrisma;
+  let organizationId: string | null = options.organizationId ?? null;
+  const retellAgentId = input.agent_id || input.call?.agent_id;
+
+  if (!organizationId && retellAgentId && db?.providerLink?.findFirst) {
+    try {
+      const link = await db.providerLink.findFirst({
+        where: { provider: "retell", providerId: retellAgentId },
+        include: { agent: true },
+      });
+      if (link?.agent?.organizationId) {
+        organizationId = link.agent.organizationId;
+      }
+    } catch {}
+  }
+
+  if (!organizationId && db?.organization?.findFirst) {
+    try {
+      const defaultOrg = await db.organization.findFirst({
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      });
+      organizationId = defaultOrg?.id ?? null;
+    } catch {}
+  }
+
+  if (!organizationId) {
+    return {
+      status: "error",
+      statusCode: 500,
+      booking_status: "failed",
+      message: "Organization context is missing for appointment rescheduling.",
+    };
+  }
+
+  // Find the appointment to reschedule
+  let existingAppt: any = null;
+
+  if (rawBookingUid?.trim()) {
+    const trimmedUid = rawBookingUid.trim();
+    if (db?.appointment?.findFirst) {
+      existingAppt = await db.appointment.findFirst({
+        where: {
+          organizationId,
+          OR: [
+            { calcomEventId: trimmedUid },
+            { id: trimmedUid },
+            ...(input.appointment_id ? [{ id: input.appointment_id }] : []),
+          ],
+        },
+        include: { contact: true },
+      });
+
+      if (!existingAppt) {
+        // Tenant isolation: Check if it belongs to another organization
+        const crossOrgAppt = await db.appointment.findFirst({
+          where: {
+            OR: [
+              { calcomEventId: trimmedUid },
+              { id: trimmedUid },
+              ...(input.appointment_id ? [{ id: input.appointment_id }] : []),
+            ],
+          },
+        });
+        if (crossOrgAppt && crossOrgAppt.organizationId !== organizationId) {
+          return {
+            status: "error",
+            statusCode: 403,
+            booking_status: "failed",
+            message: "Forbidden: You do not have permission to reschedule appointments from another organization.",
+          };
+        }
+
+        return {
+          status: "error",
+          statusCode: 404,
+          booking_status: "failed",
+          message: `Appointment with reference '${trimmedUid}' was not found.`,
+        };
+      }
+
+      // If caller phone is also provided, verify ownership
+      if (existingAppt && rawPhone?.trim()) {
+        const contactPhone = existingAppt.contact?.phone;
+        const metaPhone =
+          typeof existingAppt.metadata === "object" && existingAppt.metadata
+            ? (existingAppt.metadata.phoneNumber || existingAppt.metadata.phone)
+            : null;
+        if (
+          (contactPhone || metaPhone) &&
+          !phoneNumbersMatch(contactPhone, rawPhone) &&
+          !phoneNumbersMatch(metaPhone, rawPhone)
+        ) {
+          return {
+            status: "error",
+            statusCode: 403,
+            booking_status: "failed",
+            message: "Forbidden: The specified appointment does not belong to the caller's phone number.",
+          };
+        }
+      }
+    }
+  } else if (rawPhone?.trim()) {
+    // Option A: Caller identification via authenticated caller's phone number
+    const rawClean = rawPhone.trim();
+
+    let upcomingAppts: any[] = [];
+    if (db?.appointment?.findMany) {
+      upcomingAppts = await db.appointment.findMany({
+        where: {
+          organizationId,
+          status: { in: ["confirmed", "pending"] },
+          startsAt: { gte: now },
+        },
+        include: { contact: true },
+        orderBy: { startsAt: "asc" },
+      });
+    }
+
+    // Match appointments for this phone number within the authenticated organization
+    const matchingAppts = upcomingAppts.filter((a: any) => {
+      const contactPhone = a.contact?.phone;
+      const metaPhone =
+        typeof a.metadata === "object" && a.metadata
+          ? (a.metadata.phoneNumber || a.metadata.phone || a.metadata.phone_number || a.metadata.callerPhone)
+          : null;
+
+      return phoneNumbersMatch(contactPhone, rawClean) || phoneNumbersMatch(metaPhone, rawClean);
+    });
+
+    if (matchingAppts.length === 0) {
+      return {
+        status: "error",
+        statusCode: 404,
+        booking_status: "failed",
+        message: `No upcoming appointments found for phone number '${rawClean}'. Please provide your booking reference.`,
+      };
+    }
+
+    if (matchingAppts.length > 1) {
+      // Multiple appointments exist: do not guess; ask customer to clarify
+      const appointmentListStr = matchingAppts
+        .map((a: any) => {
+          const startD = a.startsAt instanceof Date ? a.startsAt : new Date(a.startsAt);
+          let validTz = "Asia/Kolkata";
+          if (a.timezone?.trim()) {
+            try {
+              Intl.DateTimeFormat(undefined, { timeZone: a.timezone.trim() });
+              validTz = a.timezone.trim();
+            } catch {}
+          }
+          const dateStr = startD.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            timeZone: validTz,
+          });
+          const timeStr = startD.toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+            timeZone: validTz,
+          });
+          return `${a.serviceName || "Appointment"} on ${dateStr} at ${timeStr} (Ref: ${a.calcomEventId || a.id})`;
+        })
+        .join("; ");
+
+      return {
+        status: "error",
+        statusCode: 400,
+        booking_status: "failed",
+        message: `You have multiple upcoming appointments: ${appointmentListStr}. Please clarify which appointment you would like to reschedule by providing the booking reference or date.`,
+      };
+    }
+
+    existingAppt = matchingAppts[0];
+  } else {
+    return {
+      status: "error",
+      statusCode: 400,
+      booking_status: "failed",
+      message: "Please provide either a booking reference (calcomEventId) or your phone number to identify the appointment.",
+    };
+  }
+
+  if (!existingAppt) {
+    return {
+      status: "error",
+      statusCode: 404,
+      booking_status: "failed",
+      message: "No appointment found to reschedule.",
+    };
+  }
+
+  // Ensure appointment is reschedulable
+  if (existingAppt.status === "cancelled" || existingAppt.status === "canceled") {
+    return {
+      status: "error",
+      statusCode: 400,
+      booking_status: "failed",
+      message: "Cannot reschedule a cancelled appointment. Please book a new appointment instead.",
+    };
+  }
+
+  if (!existingAppt.calcomEventId) {
+    return {
+      status: "error",
+      statusCode: 400,
+      booking_status: "failed",
+      message: "Appointment record is missing a Cal.com booking reference.",
+    };
+  }
+
+  // Determine timezone, start time, end time, and duration
+  const timezone = input.timezone?.trim() || existingAppt.timezone || "Asia/Kolkata";
+  const startsAt = createDateInTimezone(
+    parsedDate.year,
+    parsedDate.month,
+    parsedDate.day,
+    parsedTime.hours,
+    parsedTime.minutes,
+    timezone,
+  );
+
+  const apptStart = existingAppt.startsAt instanceof Date ? existingAppt.startsAt : new Date(existingAppt.startsAt);
+  const apptEnd = existingAppt.endsAt instanceof Date ? existingAppt.endsAt : (existingAppt.endsAt ? new Date(existingAppt.endsAt) : null);
+  const durationMs =
+    apptEnd && apptEnd.getTime() > apptStart.getTime()
+      ? apptEnd.getTime() - apptStart.getTime()
+      : 60 * 60 * 1000;
+  const endsAt = new Date(startsAt.getTime() + durationMs);
+  const durationMinutes = Math.max(1, Math.round(durationMs / (60 * 1000)));
+
+  if (startsAt.getTime() < now.getTime()) {
+    return {
+      status: "unavailable",
+      statusCode: 409,
+      booking_status: "failed",
+      message: `Cannot reschedule to a slot in the past (${slot_date} ${slot_time}). Please choose a future slot.`,
+    };
+  }
+
+  // Range overlap conflict check in local database (excluding the appointment being rescheduled)
+  if (db?.appointment?.findFirst) {
+    try {
+      const conflictingAppt = await db.appointment.findFirst({
+        where: {
+          organizationId,
+          status: { in: ["confirmed", "pending"] },
+          id: { not: existingAppt.id },
+          OR: [
+            {
+              startsAt: { lt: endsAt },
+              endsAt: { gt: startsAt },
+            },
+            {
+              endsAt: null,
+              startsAt: {
+                lt: endsAt,
+                gt: new Date(startsAt.getTime() - 60 * 60 * 1000),
+              },
+            },
+          ],
+        },
+      });
+      if (conflictingAppt) {
+        return {
+          status: "unavailable",
+          statusCode: 409,
+          booking_status: "failed",
+          message: `The requested time range (${slot_date} ${slot_time}) overlaps with an existing appointment. Please choose another time.`,
+        };
+      }
+    } catch {}
+  }
+
+  // Validate Cal.com runtime configuration
+  const env = options.environment ?? options.env ?? process.env;
+  const calcomApiKey = env.CALCOM_API_KEY?.trim();
+
+  if (!calcomApiKey || calcomApiKey === "replace-with-cal-com-api-key" || calcomApiKey.includes("replace-")) {
+    return {
+      status: "error",
+      statusCode: 500,
+      booking_status: "failed",
+      message: "Scheduling provider is not configured. Missing or invalid CALCOM_API_KEY.",
+    };
+  }
+
+  // Call Cal.com API v2 Reschedule endpoint
+  const fetcher = options.calcomFetcher ?? options.fetchFn ?? fetch;
+  const bookingApiVersion = env.CALCOM_BOOKING_API_VERSION?.trim() || "2024-08-13";
+  const calcomBookingUid = existingAppt.calcomEventId.trim();
+  const rescheduleUrl = `https://api.cal.com/v2/bookings/${encodeURIComponent(calcomBookingUid)}/reschedule`;
+
+  const rescheduleBody = {
+    start: startsAt.toISOString(),
+    lengthInMinutes: durationMinutes,
+    reschedulingReason,
+  };
+
+  let newBookingUid = calcomBookingUid;
+  let meetingUrl = "";
+
+  try {
+    const response = await fetcher(rescheduleUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${calcomApiKey}`,
+        "cal-api-version": bookingApiVersion,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(rescheduleBody),
+    });
+
+    let errorDetail = "";
+    if (!response.ok) {
+      try {
+        const errJson = await response.clone().json();
+        if (typeof errJson?.message === "string") {
+          errorDetail = errJson.message.slice(0, 200);
+        } else if (typeof errJson?.error?.message === "string") {
+          errorDetail = errJson.error.message.slice(0, 200);
+        } else if (typeof errJson?.error === "string") {
+          errorDetail = errJson.error.slice(0, 200);
+        } else if (Array.isArray(errJson?.error?.details)) {
+          errorDetail = JSON.stringify(errJson.error.details).slice(0, 200);
+        }
+      } catch {
+        try {
+          errorDetail = (await response.clone().text()).slice(0, 200);
+        } catch {}
+      }
+    }
+
+    if (response.status === 409) {
+      console.warn(
+        `[Cal.com Reschedule Diagnostic] upstream_status=409 bookingUid=${calcomBookingUid} date=${slot_date} time=${slot_time} reason="slot_conflict"${errorDetail ? ` detail="${errorDetail}"` : ""}`
+      );
+      return {
+        status: "unavailable",
+        statusCode: 409,
+        booking_status: "failed",
+        message: "The requested time slot is unavailable or has already been booked on Cal.com. Please choose another slot.",
+      };
+    }
+
+    if (response.status === 400) {
+      const isSlotUnavailable = /slot.*(unavailable|no longer available|already booked|not available)|time.*unavailable/i.test(
+        errorDetail
+      );
+      if (isSlotUnavailable) {
+        console.warn(
+          `[Cal.com Reschedule Diagnostic] upstream_status=400 bookingUid=${calcomBookingUid} date=${slot_date} time=${slot_time} reason="slot_unavailable"${errorDetail ? ` detail="${errorDetail}"` : ""}`
+        );
+        return {
+          status: "unavailable",
+          statusCode: 409,
+          booking_status: "failed",
+          message: "The requested time slot is unavailable or has already been booked on Cal.com. Please choose another slot.",
+        };
+      }
+
+      console.warn(
+        `[Cal.com Reschedule Diagnostic] upstream_status=400 bookingUid=${calcomBookingUid} date=${slot_date} time=${slot_time} reason="bad_request"${errorDetail ? ` detail="${errorDetail}"` : ""}`
+      );
+      return {
+        status: "error",
+        statusCode: 400,
+        booking_status: "failed",
+        message: `Reschedule request was rejected by Cal.com: ${errorDetail || "Invalid request"}.`,
+      };
+    }
+
+    if (response.status === 401) {
+      return {
+        status: "error",
+        statusCode: 502,
+        booking_status: "failed",
+        message: "Cal.com authentication failed. Please check CALCOM_API_KEY.",
+      };
+    }
+
+    if (response.status === 404) {
+      return {
+        status: "error",
+        statusCode: 404,
+        booking_status: "failed",
+        message: `Booking '${calcomBookingUid}' was not found on Cal.com.`,
+      };
+    }
+
+    if (response.status === 429) {
+      return {
+        status: "error",
+        statusCode: 429,
+        booking_status: "failed",
+        message: "Cal.com rate limit reached. Please try again shortly.",
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        status: "error",
+        statusCode: 502,
+        booking_status: "failed",
+        message: `Booking provider returned an error (HTTP ${response.status}).${errorDetail ? ` ${errorDetail.slice(0, 120)}` : ""}`,
+      };
+    }
+
+    const calcomData = await response.json();
+    if (calcomData?.status === "error") {
+      return {
+        status: "error",
+        statusCode: 400,
+        booking_status: "failed",
+        message: calcomData?.message || calcomData?.error || "Reschedule request was rejected by Cal.com.",
+      };
+    }
+
+    // Cal.com may issue a new booking UID on reschedule. Capture it!
+    const returnedUid =
+      calcomData?.data?.uid ||
+      calcomData?.data?.booking?.uid ||
+      calcomData?.booking?.uid ||
+      calcomData?.data?.id ||
+      calcomData?.data?.booking?.id ||
+      calcomData?.booking?.id ||
+      calcomData?.uid ||
+      calcomData?.id ||
+      (Array.isArray(calcomData?.data) ? calcomData.data[0]?.uid || calcomData.data[0]?.id : null);
+
+    if (returnedUid) {
+      newBookingUid = String(returnedUid);
+    }
+
+    meetingUrl =
+      calcomData?.data?.meetingUrl ||
+      calcomData?.data?.booking?.meetingUrl ||
+      calcomData?.booking?.meetingUrl ||
+      calcomData?.data?.location ||
+      calcomData?.booking?.location ||
+      "";
+  } catch (err: any) {
+    console.error(`[Cal.com Reschedule Error] bookingUid=${calcomBookingUid} error="${err?.message || "Unknown error"}"`);
+    if (err?.name === "AbortError" || /timeout/i.test(err?.message)) {
+      return {
+        status: "error",
+        statusCode: 504,
+        booking_status: "failed",
+        message: "Scheduling provider request timed out.",
+      };
+    }
+    return {
+      status: "error",
+      statusCode: 502,
+      booking_status: "failed",
+      message: `Booking provider error: ${err?.message || "Failed to connect to Cal.com"}.`,
+    };
+  }
+
+  // Update existing local Appointment record in PostgreSQL
+  const previousMetadata =
+    (typeof existingAppt.metadata === "object" && existingAppt.metadata
+      ? existingAppt.metadata
+      : {}) as Record<string, any>;
+  const originatingCallId = input.call?.call_id || null;
+
+  const updatedMetadata: Record<string, any> = {
+    ...previousMetadata,
+    calcomBookingUid: String(newBookingUid),
+    bookingUid: String(newBookingUid),
+    calcomEventId: String(newBookingUid),
+    slotDate: slot_date,
+    slotTime: slot_time,
+    rescheduledAt: now.toISOString(),
+    previousStartsAt: apptStart.toISOString(),
+    reschedulingReason,
+    ...(originatingCallId ? { lastRescheduledCallId: originatingCallId } : {}),
+  };
+
+  try {
+    if (db?.$transaction) {
+      await db.$transaction(async (tx: any) => {
+        await tx.appointment.update({
+          where: { id: existingAppt.id },
+          data: {
+            calcomEventId: String(newBookingUid),
+            startsAt,
+            endsAt,
+            timezone,
+            status: "confirmed",
+            metadata: updatedMetadata,
+          },
+        });
+
+        if (tx.auditLog?.create) {
+          await tx.auditLog.create({
+            data: {
+              organizationId,
+              entity: "appointment",
+              action: "reschedule",
+              details: {
+                appointmentId: existingAppt.id,
+                calcomBookingUid: String(newBookingUid),
+                previousCalcomBookingUid: calcomBookingUid,
+                previousStartsAt: apptStart.toISOString(),
+                newStartsAt: startsAt.toISOString(),
+                reschedulingReason,
+              },
+            },
+          });
+        }
+
+        if (originatingCallId && tx.call?.findFirst && tx.callEvent?.create) {
+          try {
+            const matchedCall = await tx.call.findFirst({
+              where: { externalCallId: originatingCallId, organizationId },
+            });
+            if (matchedCall) {
+              await tx.callEvent.create({
+                data: {
+                  callId: matchedCall.id,
+                  eventType: "appointment_rescheduled",
+                  source: "retell_custom_tool",
+                  payload: {
+                    appointmentId: existingAppt.id,
+                    calcomBookingUid: String(newBookingUid),
+                    startsAt: startsAt.toISOString(),
+                    endsAt: endsAt.toISOString(),
+                    reschedulingReason,
+                  },
+                },
+              });
+            }
+          } catch {}
+        }
+      });
+    } else if (db?.appointment?.update) {
+      await db.appointment.update({
+        where: { id: existingAppt.id },
+        data: {
+          calcomEventId: String(newBookingUid),
+          startsAt,
+          endsAt,
+          timezone,
+          status: "confirmed",
+          metadata: updatedMetadata,
+        },
+      });
+    }
+  } catch (dbError: any) {
+    console.error("Database error in rescheduleAppointment:", dbError?.message);
+    return {
+      status: "error",
+      statusCode: 500,
+      booking_status: "failed",
+      message: "Appointment was rescheduled with Cal.com, but failed to update local records.",
+    };
+  }
+
+  const location =
+    (typeof existingAppt.metadata === "object" && existingAppt.metadata
+      ? existingAppt.metadata.location || existingAppt.metadata.propertyType
+      : null) || "Customer Location";
+
+  const endFormatted = formatTimeSlot(
+    (parsedTime.hours + Math.floor(durationMinutes / 60)) % 24,
+    (parsedTime.minutes + (durationMinutes % 60)) % 60,
+  );
+
+  return {
+    status: "confirmed",
+    statusCode: 200,
+    booking_status: "confirmed",
+    booking_id: existingAppt.id,
+    booking_uid: String(newBookingUid),
+    booking_reference: String(newBookingUid),
+    start_time: slot_time.trim(),
+    end_time: endFormatted,
+    duration_minutes: durationMinutes,
+    title: existingAppt.serviceName || "Appointment",
+    location: String(location),
+    meeting_url: meetingUrl,
+    message: `Appointment has been successfully rescheduled to ${slot_date.trim()} at ${slot_time.trim()}.`,
   };
 }
 

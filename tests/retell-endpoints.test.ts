@@ -5,6 +5,7 @@ import { NextRequest } from "next/server.js";
 import { POST as availabilityPost, GET as availabilityGet } from "../app/api/availability/route.ts";
 import { POST as bookAppointmentPost } from "../app/api/book-appointment/route.ts";
 import { POST as takeMessagePost } from "../app/api/take-message/route.ts";
+import { POST as rescheduleAppointmentPost } from "../app/api/reschedule-appointment/route.ts";
 
 const TEST_SECRET = "super-secret-tool-token-789";
 
@@ -73,6 +74,16 @@ test("1. Missing or incorrect x-retell-secret returns 401 across all 3 endpoints
     assert.equal(r3.status, 401);
     const body3 = await r3.json();
     assert.equal(body3.success, false);
+
+    // Missing header for reschedule-appointment
+    const r4 = await rescheduleAppointmentPost(
+      createNextRequest("https://api.example.test/api/reschedule-appointment", {
+        body: { phone_number: "+919876543210", slot_date: "15-11-2026", slot_time: "10:00 AM" },
+      }),
+    );
+    assert.equal(r4.status, 401);
+    const body4 = await r4.json();
+    assert.equal(body4.booking_status, "failed");
   } finally {
     process.env.RETELL_TOOL_SECRET = originalEnv;
   }

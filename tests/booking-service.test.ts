@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { NextRequest } from "next/server.js";
+import { POST as rescheduleAppointmentRoute } from "../app/api/reschedule-appointment/route.ts";
 
 import {
   checkAvailability,
   bookAppointment,
+  rescheduleAppointment,
+  phoneNumbersMatch,
   takeMessage,
   extractToolPayload,
   verifyToolAuthorization,
@@ -13,6 +17,7 @@ import {
   createDateInTimezone,
   type CheckAvailabilityInput,
   type BookAppointmentInput,
+  type RescheduleAppointmentInput,
   type TakeMessageInput,
 } from "../lib/server/booking/service.ts";
 
@@ -51,6 +56,7 @@ function createMockDb(overrides: {
       findMany: async (args: any) => {
         return appointments.filter((a) => {
           if (args?.where?.organizationId && a.organizationId !== args.where.organizationId) return false;
+          if (args?.where?.status?.in && !args.where.status.in.includes(a.status)) return false;
           if (args?.where?.startsAt?.gte && a.startsAt < args.where.startsAt.gte) return false;
           if (args?.where?.startsAt?.lte && a.startsAt > args.where.startsAt.lte) return false;
           return true;
@@ -58,11 +64,35 @@ function createMockDb(overrides: {
       },
       findFirst: async (args: any) => {
         return appointments.find((a) => {
-          if (args?.where?.startsAt && a.startsAt.getTime() === args.where.startsAt.getTime()) {
-            if (args?.where?.organizationId && a.organizationId !== args.where.organizationId) {
-              return false;
+          if (args?.where?.organizationId && a.organizationId !== args.where.organizationId) {
+            return false;
+          }
+          if (args?.where?.id?.not && a.id === args.where.id.not) {
+            return false;
+          }
+          if (args?.where?.status?.in && !args.where.status.in.includes(a.status)) {
+            return false;
+          }
+          if (args?.where?.startsAt && args.where.startsAt instanceof Date) {
+            if (a.startsAt.getTime() === args.where.startsAt.getTime()) {
+              return true;
             }
-            return true;
+          }
+          if (args?.where?.OR && Array.isArray(args.where.OR)) {
+            const matchesOr = args.where.OR.some((cond: any) => {
+              if (cond.calcomEventId && a.calcomEventId === cond.calcomEventId) return true;
+              if (cond.id && a.id === cond.id) return true;
+              if (cond.startsAt?.lt && cond.endsAt?.gt) {
+                const aEnd = a.endsAt ?? new Date(a.startsAt.getTime() + 60 * 60 * 1000);
+                if (a.startsAt < cond.startsAt.lt && aEnd > cond.endsAt.gt) return true;
+              }
+              if (cond.endsAt === null && cond.startsAt?.lt && cond.startsAt?.gt) {
+                const aEnd = a.endsAt ?? new Date(a.startsAt.getTime() + 60 * 60 * 1000);
+                if (a.startsAt < cond.startsAt.lt && aEnd > cond.startsAt.gt) return true;
+              }
+              return false;
+            });
+            if (matchesOr) return true;
           }
           return false;
         }) ?? null;
@@ -71,6 +101,14 @@ function createMockDb(overrides: {
         const created = { id: `appt-${appointments.length + 1}`, ...data };
         appointments.push(created);
         return created;
+      },
+      update: async ({ where, data }: any) => {
+        const index = appointments.findIndex((a) => a.id === where.id);
+        if (index >= 0) {
+          appointments[index] = { ...appointments[index], ...data };
+          return appointments[index];
+        }
+        return null;
       },
     },
     contact: {
@@ -1797,3 +1835,689 @@ test("Supports location aliases (service_address, address, city)", async () => {
     });
   }
 });
+
+// ==========================================
+// Reschedule Appointment Unit Tests
+// ==========================================
+
+test("rescheduleAppointment: Option A caller identification with 1 upcoming appointment succeeds", async () => {
+  const simulatedNow = new Date("2026-11-01T06:00:00.000Z");
+  const initialStartsAt = new Date("2026-11-02T04:30:00.000Z"); // 10:00 AM IST
+  const initialEndsAt = new Date("2026-11-02T05:30:00.000Z");   // 11:00 AM IST
+
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-resched-1",
+        organizationId: "org-test-1",
+        contactId: "contact-1",
+        status: "confirmed",
+        startsAt: initialStartsAt,
+        endsAt: initialEndsAt,
+        timezone: "Asia/Kolkata",
+        serviceName: "AC Inspection",
+        calcomEventId: "cal_uid_initial_123",
+        metadata: {
+          customerName: "Kiran Kumar",
+          phoneNumber: "+919876543210",
+          serviceType: "AC Inspection",
+          location: "Banjara Hills",
+        },
+      },
+    ],
+    contacts: [
+      {
+        id: "contact-1",
+        organizationId: "org-test-1",
+        firstName: "Kiran",
+        lastName: "Kumar",
+        phone: "+919876543210",
+      },
+    ],
+  });
+
+  let capturedUrl = "";
+  let capturedBody: any = null;
+  const mockFetcher: typeof fetch = async (url, init) => {
+    capturedUrl = String(url);
+    capturedBody = JSON.parse(String(init?.body || "{}"));
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: {
+          uid: "cal_uid_rescheduled_456",
+          meetingUrl: "https://cal.com/meeting/456",
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  const result = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "05-11-2026",
+      slot_time: "03:00 PM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+      organizationId: "org-test-1",
+    },
+  );
+
+  assert.equal(result.status, "confirmed");
+  assert.equal(result.booking_id, "appt-resched-1");
+  assert.equal(result.booking_uid, "cal_uid_rescheduled_456");
+  assert.equal(capturedUrl, "https://api.cal.com/v2/bookings/cal_uid_initial_123/reschedule");
+  assert.equal(capturedBody.reschedulingReason, "Rescheduled via Boomi Solutions AI Voice Assistant");
+
+  // Verify database record was updated in place and preserved existing customer/service details
+  const updated = mockDb._state.appointments.find((a) => a.id === "appt-resched-1");
+  assert.equal(updated.calcomEventId, "cal_uid_rescheduled_456");
+  assert.equal(updated.metadata.calcomBookingUid, "cal_uid_rescheduled_456");
+  assert.equal(updated.metadata.bookingUid, "cal_uid_rescheduled_456");
+  assert.equal(updated.metadata.customerName, "Kiran Kumar");
+  assert.equal(updated.metadata.serviceType, "AC Inspection");
+  assert.equal(updated.metadata.location, "Banjara Hills");
+  assert.equal(mockDb._state.appointments.length, 1);
+});
+
+test("rescheduleAppointment: Option A with multiple upcoming appointments asks customer to clarify", async () => {
+  const simulatedNow = new Date("2026-11-01T06:00:00.000Z");
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-1",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: new Date("2026-11-03T04:30:00.000Z"),
+        endsAt: new Date("2026-11-03T05:30:00.000Z"),
+        serviceName: "AC Inspection",
+        calcomEventId: "uid-1",
+        metadata: { phoneNumber: "+919876543210" },
+      },
+      {
+        id: "appt-2",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: new Date("2026-11-06T04:30:00.000Z"),
+        endsAt: new Date("2026-11-06T05:30:00.000Z"),
+        serviceName: "Filter Replacement",
+        calcomEventId: "uid-2",
+        metadata: { phoneNumber: "+919876543210" },
+      },
+    ],
+  });
+
+  let fetcherCalled = false;
+  const mockFetcher: typeof fetch = async () => {
+    fetcherCalled = true;
+    return new Response(JSON.stringify({ status: "success" }), { status: 200 });
+  };
+
+  const result = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "07-11-2026",
+      slot_time: "10:00 AM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+      organizationId: "org-test-1",
+    },
+  );
+
+  assert.equal(result.status, "error");
+  assert.equal(result.statusCode, 400);
+  assert.match(result.message, /multiple upcoming appointments.*clarify/i);
+  assert.equal(fetcherCalled, false);
+});
+
+test("rescheduleAppointment: Option A with no upcoming appointments returns 404", async () => {
+  const simulatedNow = new Date("2026-11-01T06:00:00.000Z");
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "past-appt",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: new Date("2026-10-15T04:30:00.000Z"),
+        endsAt: new Date("2026-10-15T05:30:00.000Z"),
+        calcomEventId: "uid-past",
+        metadata: { phoneNumber: "+919876543210" },
+      },
+      {
+        id: "cancelled-appt",
+        organizationId: "org-test-1",
+        status: "cancelled",
+        startsAt: new Date("2026-11-05T04:30:00.000Z"),
+        endsAt: new Date("2026-11-05T05:30:00.000Z"),
+        calcomEventId: "uid-cancelled",
+        metadata: { phoneNumber: "+919876543210" },
+      },
+    ],
+  });
+
+  const result = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "08-11-2026",
+      slot_time: "11:00 AM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      organizationId: "org-test-1",
+    },
+  );
+
+  assert.equal(result.status, "error");
+  assert.equal(result.statusCode, 404);
+  assert.match(result.message, /No upcoming appointments found for phone number/i);
+});
+
+test("rescheduleAppointment: Tenant isolation prevents cross-tenant access", async () => {
+  const simulatedNow = new Date("2026-11-01T06:00:00.000Z");
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "org2-appt",
+        organizationId: "org-test-2",
+        status: "confirmed",
+        startsAt: new Date("2026-11-04T04:30:00.000Z"),
+        endsAt: new Date("2026-11-04T05:30:00.000Z"),
+        calcomEventId: "cal_uid_org2",
+        metadata: { phoneNumber: "+919876543210" },
+      },
+    ],
+  });
+
+  // 1. Phone number search across tenant boundary returns 404
+  const resPhone = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "08-11-2026",
+      slot_time: "11:00 AM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      organizationId: "org-test-1",
+    },
+  );
+  assert.equal(resPhone.status, "error");
+  assert.equal(resPhone.statusCode, 404);
+
+  // 2. Direct UID access across tenant boundary returns 403 Forbidden
+  const resUid = await rescheduleAppointment(
+    {
+      booking_uid: "cal_uid_org2",
+      slot_date: "08-11-2026",
+      slot_time: "11:00 AM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      organizationId: "org-test-1",
+    },
+  );
+  assert.equal(resUid.status, "error");
+  assert.equal(resUid.statusCode, 403);
+  assert.match(resUid.message, /permission to reschedule appointments from another organization/i);
+});
+
+test("rescheduleAppointment: Default and custom rescheduling reasons", async () => {
+  const simulatedNow = new Date("2026-11-01T06:00:00.000Z");
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-reason-test",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: new Date("2026-11-04T04:30:00.000Z"),
+        endsAt: new Date("2026-11-04T05:30:00.000Z"),
+        calcomEventId: "uid-reason",
+        metadata: { phoneNumber: "+919876543210" },
+      },
+    ],
+  });
+
+  let capturedBody: any = null;
+  const mockFetcher: typeof fetch = async (_url, init) => {
+    capturedBody = JSON.parse(String(init?.body || "{}"));
+    return new Response(
+      JSON.stringify({ status: "success", data: { uid: "uid-reason-updated" } }),
+      { status: 200 },
+    );
+  };
+
+  const result = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "09-11-2026",
+      slot_time: "04:00 PM",
+      rescheduling_reason: "Customer has doctor appointment",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+      organizationId: "org-test-1",
+    },
+  );
+
+  assert.equal(result.status, "confirmed");
+  assert.equal(capturedBody.reschedulingReason, "Customer has doctor appointment");
+  const updated = mockDb._state.appointments.find((a) => a.id === "appt-reason-test");
+  assert.equal(updated.metadata.reschedulingReason, "Customer has doctor appointment");
+});
+
+test("rescheduleAppointment: Cal.com new booking UID updates existing appointment and does not retain outdated UID", async () => {
+  const simulatedNow = new Date("2026-11-01T06:00:00.000Z");
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-uid-replacement",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: new Date("2026-11-04T04:30:00.000Z"),
+        endsAt: new Date("2026-11-04T05:30:00.000Z"),
+        calcomEventId: "outdated_cal_uid_001",
+        metadata: {
+          calcomBookingUid: "outdated_cal_uid_001",
+          bookingUid: "outdated_cal_uid_001",
+          phoneNumber: "+919876543210",
+        },
+      },
+    ],
+  });
+
+  const mockFetcher: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        status: "success",
+        data: {
+          uid: "brand_new_cal_uid_777",
+        },
+      }),
+      { status: 200 },
+    );
+  };
+
+  const result = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "06-11-2026",
+      slot_time: "11:00 AM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+      organizationId: "org-test-1",
+    },
+  );
+
+  assert.equal(result.status, "confirmed");
+  assert.equal(result.booking_uid, "brand_new_cal_uid_777");
+
+  const appt = mockDb._state.appointments.find((a) => a.id === "appt-uid-replacement");
+  assert.equal(appt.calcomEventId, "brand_new_cal_uid_777");
+  assert.equal(appt.metadata.calcomBookingUid, "brand_new_cal_uid_777");
+  assert.equal(appt.metadata.bookingUid, "brand_new_cal_uid_777");
+  assert.notEqual(appt.calcomEventId, "outdated_cal_uid_001");
+  assert.notEqual(appt.metadata.calcomBookingUid, "outdated_cal_uid_001");
+});
+
+test("rescheduleAppointment: Range overlap conflict check excludes self and detects overlapping ranges", async () => {
+  const simulatedNow = new Date("2026-11-01T06:00:00.000Z");
+
+  const apptConflictStart = new Date("2026-11-05T04:30:00.000Z"); // 10:00 AM IST
+  const apptConflictEnd = new Date("2026-11-05T05:30:00.000Z");   // 11:00 AM IST
+
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-to-reschedule",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: new Date("2026-11-04T04:30:00.000Z"),
+        endsAt: new Date("2026-11-04T05:30:00.000Z"),
+        calcomEventId: "uid-my-appt",
+        metadata: { phoneNumber: "+919876543210" },
+      },
+      {
+        id: "appt-other-booking",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: apptConflictStart,
+        endsAt: apptConflictEnd,
+        calcomEventId: "uid-other-appt",
+        metadata: { phoneNumber: "+919999999999" },
+      },
+    ],
+  });
+
+  let fetcherCalled = false;
+  const mockFetcher: typeof fetch = async () => {
+    fetcherCalled = true;
+    return new Response(JSON.stringify({ status: "success" }), { status: 200 });
+  };
+
+  // Attempt 1: Overlapping with appt-other-booking (10:30 AM IST overlaps 10:00-11:00)
+  const conflictResult = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "05-11-2026",
+      slot_time: "10:30 AM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+      organizationId: "org-test-1",
+    },
+  );
+
+  assert.equal(conflictResult.status, "unavailable");
+  assert.equal(conflictResult.statusCode, 409);
+  assert.match(conflictResult.message, /overlaps with an existing appointment/i);
+  assert.equal(fetcherCalled, false);
+
+  // Attempt 2: Self-overlap (rescheduling appt-to-reschedule by 30 mins within its own previous range)
+  const selfOverlapResult = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "04-11-2026",
+      slot_time: "10:30 AM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+      organizationId: "org-test-1",
+    },
+  );
+
+  assert.equal(selfOverlapResult.status, "confirmed");
+  assert.equal(fetcherCalled, true);
+});
+
+test("rescheduleAppointment: Cal.com failure does not modify local appointment", async () => {
+  const simulatedNow = new Date("2026-11-01T06:00:00.000Z");
+  const origStartsAt = new Date("2026-11-03T04:30:00.000Z");
+
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-calcom-fail",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: origStartsAt,
+        endsAt: new Date("2026-11-03T05:30:00.000Z"),
+        calcomEventId: "uid-fail-test",
+        metadata: { phoneNumber: "+919876543210" },
+      },
+    ],
+  });
+
+  // 1. Cal.com 409 Conflict
+  const fetcher409: typeof fetch = async () => {
+    return new Response(JSON.stringify({ message: "Slot already booked on calendar" }), { status: 409 });
+  };
+  const res409 = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "06-11-2026",
+      slot_time: "02:00 PM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: fetcher409,
+      organizationId: "org-test-1",
+    },
+  );
+  assert.equal(res409.status, "unavailable");
+  assert.equal(res409.statusCode, 409);
+  let appt = mockDb._state.appointments.find((a) => a.id === "appt-calcom-fail");
+  assert.equal(appt.startsAt.getTime(), origStartsAt.getTime());
+  assert.equal(appt.calcomEventId, "uid-fail-test");
+
+  // 2. Cal.com 500 error
+  const fetcher500: typeof fetch = async () => {
+    return new Response("Internal Server Error", { status: 500 });
+  };
+  const res500 = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "06-11-2026",
+      slot_time: "02:00 PM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: fetcher500,
+      organizationId: "org-test-1",
+    },
+  );
+  assert.equal(res500.status, "error");
+  assert.equal(res500.statusCode, 502);
+  appt = mockDb._state.appointments.find((a) => a.id === "appt-calcom-fail");
+  assert.equal(appt.startsAt.getTime(), origStartsAt.getTime());
+  assert.equal(appt.calcomEventId, "uid-fail-test");
+
+  // 3. Cal.com network timeout
+  const fetcherTimeout: typeof fetch = async () => {
+    const err: any = new Error("The operation was aborted due to timeout");
+    err.name = "AbortError";
+    throw err;
+  };
+  const resTimeout = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "06-11-2026",
+      slot_time: "02:00 PM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: fetcherTimeout,
+      organizationId: "org-test-1",
+    },
+  );
+  assert.equal(resTimeout.status, "error");
+  assert.equal(resTimeout.statusCode, 504);
+  appt = mockDb._state.appointments.find((a) => a.id === "appt-calcom-fail");
+  assert.equal(appt.startsAt.getTime(), origStartsAt.getTime());
+  assert.equal(appt.calcomEventId, "uid-fail-test");
+});
+
+test("/api/reschedule-appointment route validates authentication, oversized body, and invalid JSON", async () => {
+  const origSecret = process.env.RETELL_TOOL_SECRET;
+  process.env.RETELL_TOOL_SECRET = "test-retell-secret-xyz";
+
+  try {
+    // 1. Missing secret header returns 401
+    const reqNoAuth = new NextRequest(new URL("https://api.example.test/api/reschedule-appointment"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone_number: "+919876543210", slot_date: "05-11-2026", slot_time: "10:00 AM" }),
+    });
+    const resNoAuth = await rescheduleAppointmentRoute(reqNoAuth);
+    assert.equal(resNoAuth.status, 401);
+
+    // 2. Invalid secret header returns 401
+    const reqBadAuth = new NextRequest(new URL("https://api.example.test/api/reschedule-appointment"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-retell-secret": "wrong-secret" },
+      body: JSON.stringify({ phone_number: "+919876543210", slot_date: "05-11-2026", slot_time: "10:00 AM" }),
+    });
+    const resBadAuth = await rescheduleAppointmentRoute(reqBadAuth);
+    assert.equal(resBadAuth.status, 401);
+
+    // 3. Oversized payload returns 413
+    const reqOversized = new NextRequest(new URL("https://api.example.test/api/reschedule-appointment"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": "70000",
+        "x-retell-secret": "test-retell-secret-xyz",
+      },
+      body: JSON.stringify({ data: "a".repeat(70000) }),
+    });
+    const resOversized = await rescheduleAppointmentRoute(reqOversized);
+    assert.equal(resOversized.status, 413);
+
+    // 4. Malformed JSON returns 400
+    const reqBadJson = new NextRequest(new URL("https://api.example.test/api/reschedule-appointment"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-retell-secret": "test-retell-secret-xyz",
+      },
+      body: "{ not valid json ",
+    });
+    const resBadJson = await rescheduleAppointmentRoute(reqBadJson);
+    assert.equal(resBadJson.status, 400);
+  } finally {
+    process.env.RETELL_TOOL_SECRET = origSecret;
+  }
+});
+
+test("phoneNumbersMatch accurately compares Indian (+91), US (+1), formatted, and distinct numbers", () => {
+  // Matching pairs
+  assert.equal(phoneNumbersMatch("+919876543210", "9876543210"), true);
+  assert.equal(phoneNumbersMatch("9876543210", "+919876543210"), true);
+  assert.equal(phoneNumbersMatch("+91 98765 43210", "+91-98765-43210"), true);
+  assert.equal(phoneNumbersMatch("+91 98765 43210", "09876543210"), true);
+  assert.equal(phoneNumbersMatch("+1 (555) 123-4567", "5551234567"), true);
+  assert.equal(phoneNumbersMatch("0401234567", "1234567"), true);
+
+  // Non-matching pairs
+  assert.equal(phoneNumbersMatch("+919876543210", "+919876543211"), false);
+  assert.equal(phoneNumbersMatch("+914012345678", "+918012345678"), false);
+  assert.equal(phoneNumbersMatch("+919876543210", "1234567890"), false);
+  assert.equal(phoneNumbersMatch(null, "+919876543210"), false);
+  assert.equal(phoneNumbersMatch("+919876543210", undefined), false);
+  assert.equal(phoneNumbersMatch("", "   "), false);
+});
+
+test("rescheduleAppointment: Safe formatting of multiple appointments list with invalid or missing timezone", async () => {
+  const simulatedNow = new Date("2026-11-01T06:00:00.000Z");
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-bad-tz-1",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: new Date("2026-11-03T04:30:00.000Z"),
+        endsAt: new Date("2026-11-03T05:30:00.000Z"),
+        timezone: "Invalid/Not_A_Real_Timezone", // Invalid timezone
+        serviceName: "AC Inspection",
+        calcomEventId: "uid-1",
+        metadata: { phoneNumber: "+919876543210" },
+      },
+      {
+        id: "appt-bad-tz-2",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: new Date("2026-11-06T04:30:00.000Z"),
+        endsAt: new Date("2026-11-06T05:30:00.000Z"),
+        timezone: null, // Null timezone
+        serviceName: "Filter Replacement",
+        calcomEventId: "uid-2",
+        metadata: { phoneNumber: "+919876543210" },
+      },
+    ],
+  });
+
+  const result = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "07-11-2026",
+      slot_time: "10:00 AM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      organizationId: "org-test-1",
+    },
+  );
+
+  assert.equal(result.status, "error");
+  assert.equal(result.statusCode, 400);
+  assert.match(result.message, /multiple upcoming appointments.*clarify/i);
+});
+
+test("rescheduleAppointment: Cal.com HTTP 200 with status: 'error' is safely handled without local update", async () => {
+  const simulatedNow = new Date("2026-11-01T06:00:00.000Z");
+  const origStartsAt = new Date("2026-11-03T04:30:00.000Z");
+
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-status-error",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: origStartsAt,
+        endsAt: new Date("2026-11-03T05:30:00.000Z"),
+        calcomEventId: "uid-status-err",
+        metadata: { phoneNumber: "+919876543210" },
+      },
+    ],
+  });
+
+  const mockFetcher: typeof fetch = async () => {
+    return new Response(
+      JSON.stringify({
+        status: "error",
+        message: "Booking cannot be rescheduled at this stage",
+      }),
+      { status: 200 },
+    );
+  };
+
+  const result = await rescheduleAppointment(
+    {
+      phone_number: "+919876543210",
+      slot_date: "06-11-2026",
+      slot_time: "02:00 PM",
+    },
+    {
+      db: mockDb as any,
+      now: simulatedNow,
+      env: VALID_CAL_ENV,
+      fetchFn: mockFetcher,
+      organizationId: "org-test-1",
+    },
+  );
+
+  assert.equal(result.status, "error");
+  assert.equal(result.statusCode, 400);
+  assert.match(result.message, /cannot be rescheduled/i);
+
+  // Local appointment remains untouched
+  const appt = mockDb._state.appointments.find((a) => a.id === "appt-status-error");
+  assert.equal(appt.startsAt.getTime(), origStartsAt.getTime());
+  assert.equal(appt.calcomEventId, "uid-status-err");
+});
+
+
