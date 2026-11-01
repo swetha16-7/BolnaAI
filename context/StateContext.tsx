@@ -870,14 +870,14 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const deleteAgent = async (id: string) => {
     try {
-      await api.agents.archive(id);
-      setAgents((previous) => previous.map((agent) =>
-        agent.id === id ? { ...agent, status: "paused" } : agent,
-      ));
-      showToast("Agent archived.", "success");
+      await api.agents.delete(id);
+      setAgents((previous) => previous.filter((agent) => agent.id !== id));
+      await refreshAgents();
+      void refreshDashboard();
+      showToast("AI agent deleted successfully.", "success");
       return true;
     } catch (error) {
-      reportMutationError(error, "Unable to archive agent.");
+      reportMutationError(error, "Unable to delete AI agent.");
       return false;
     }
   };

@@ -151,3 +151,17 @@ test("team APIs load membership data and do not put invitation tokens in create 
     globalThis.fetch = originalFetch;
   }
 });
+
+test("agents.delete issues DELETE request to /api/agents/:id", async () => {
+  let requestedUrl = "";
+  let requestedMethod = "";
+  const result = await api.agents.delete("agent-123", async (input, init) => {
+    requestedUrl = String(input);
+    requestedMethod = init?.method ?? "";
+    return Response.json({ success: true, deleted: true, id: "agent-123", name: "Boomi" });
+  });
+
+  assert.deepEqual(result, { success: true, deleted: true, id: "agent-123", name: "Boomi" });
+  assert.equal(requestedUrl, "/api/agents/agent-123");
+  assert.equal(requestedMethod, "DELETE");
+});

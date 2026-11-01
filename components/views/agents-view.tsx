@@ -69,9 +69,9 @@ export const AgentsView: React.FC = () => {
     window.location.assign(`#/agent-builder?edit=${id}`);
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`Archive ${name}? The agent record will be retained.`)) {
-      void deleteAgent(id);
+  const handleDelete = async (id: string) => {
+    if (confirm("Are you sure you want to permanently delete this AI agent? This action cannot be undone.")) {
+      await deleteAgent(id);
     }
   };
 
@@ -350,8 +350,8 @@ export const AgentsView: React.FC = () => {
                           </button>
                           <button
                             className="danger-btn btn-sm square-btn"
-                            onClick={() => handleDelete(agent.id, agent.name)}
-                            title="Archive agent"
+                            onClick={() => void handleDelete(agent.id)}
+                            title="Delete agent"
                           >
                             <Trash2 size={12} />
                           </button>

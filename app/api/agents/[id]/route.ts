@@ -1,3 +1,10 @@
+import {
+  deleteAgentPermanently,
+  AgentNotFoundError,
+  ActiveCallConflictError,
+  RetellNotConfiguredError,
+  RetellAgentDeleteError,
+} from "@/lib/server/agents/delete";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/server/db";
@@ -92,26 +99,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const { organization } = await requireOrganizationAccess({
+    const { organization, user } = await requireOrganizationAccess({
       allowedRoles: ["OWNER", "ADMIN", "MANAGER"],
     });
 
-    const existing = await prisma.agent.findFirst({
-      where: { ...organizationScope(organization.id), id },
-    });
+    const result = await deleteAgentPermanently(id, organization.id, user?.id);
 
-    if (!existing) {
-      return NextResponse.json({ error: "Agent not found." }, { status: 404 });
+    return NextResponse.json(result);
+  } catch (error) {
+    if (
+      error instanceof AgentNotFoundError ||
+      error instanceof ActiveCallConflictError ||
+      error instanceof RetellNotConfiguredError ||
+      error instanceof RetellAgentDeleteError
+    ) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
 
-    await prisma.agent.update({
-      where: { id },
-      data: { status: "paused" },
-      select: agentPublicSelect,
-    });
-
-    return NextResponse.json({ success: true, archived: true });
-  } catch (error) {
-    return apiErrorResponse(error, "Unable to archive agent.");
+    return apiErrorResponse(error, "Unable to delete agent.");
   }
 }

@@ -334,10 +334,17 @@ export const api = {
         method: "PATCH",
         body: jsonBody(agent),
       }),
+    delete: (id: string, fetcher: typeof fetch = fetch) =>
+      apiRequest<{ success: true; deleted: true; id: string; name: string }>(
+        `/api/agents/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+        fetcher,
+      ),
     archive: (id: string) =>
-      apiRequest<{ success: true; archived: true }>(`/api/agents/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      }),
+      apiRequest<{ success: true; archived: true }>(
+        `/api/agents/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      ),
   },
   contacts: {
     list: (

@@ -205,6 +205,74 @@ export async function listRetellAgents(client: Retell): Promise<RetellAgentSumma
   throw new RetellAgentListResponseError();
 }
 
+export async function deleteRetellAgent(
+  client: Retell,
+  retellAgentId: string,
+): Promise<void> {
+  try {
+    await client.agent.delete(retellAgentId);
+  } catch (error) {
+    if (error instanceof APIError && error.status === 404) {
+      // If the agent is already deleted or not found in Retell, treat as success
+      return;
+    }
+    throw error;
+  }
+}
+
+export function getRetellAgentDeleteFailure(error: unknown): { status: number; message: string } {
+  if (error instanceof APIConnectionTimeoutError) {
+    return {
+      status: 504,
+      message: "Retell agent deletion timed out. Try again shortly.",
+    };
+  }
+
+  if (error instanceof APIConnectionError) {
+    return {
+      status: 502,
+      message: "Could not connect to Retell to delete agent. Check network access and try again.",
+    };
+  }
+
+  if (error instanceof APIError) {
+    if (error.status === 401) {
+      return {
+        status: 502,
+        message: "Retell rejected the configured API key. Verify RETELL_API_KEY is active and belongs to the intended Retell account.",
+      };
+    }
+    if (error.status === 403) {
+      return {
+        status: 502,
+        message: "The Retell API key does not have permission to delete this agent.",
+      };
+    }
+    if (error.status === 429) {
+      return {
+        status: 503,
+        message: "Retell rate-limited the agent deletion request. Try again shortly.",
+      };
+    }
+    if (error.status >= 500) {
+      return {
+        status: 502,
+        message: `Retell is temporarily unavailable (HTTP ${error.status}). Try again shortly.`,
+      };
+    }
+
+    return {
+      status: 502,
+      message: `Retell rejected agent deletion (HTTP ${error.status}): ${error.message || "Unknown provider error"}`,
+    };
+  }
+
+  return {
+    status: 500,
+    message: error instanceof Error ? error.message : "An internal error occurred while deleting the Retell agent.",
+  };
+}
+
 function timestampOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
