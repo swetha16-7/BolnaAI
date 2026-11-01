@@ -872,8 +872,13 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       await api.agents.delete(id);
       setAgents((previous) => previous.filter((agent) => agent.id !== id));
-      await refreshAgents();
-      void refreshDashboard();
+      await Promise.all([
+        refreshAgents(),
+        refreshDashboard(),
+        loadCalls(new URLSearchParams({ page: "1", pageSize: "25" })),
+        loadActiveCalls(),
+        loadAppointments(),
+      ]);
       showToast("AI agent deleted successfully.", "success");
       return true;
     } catch (error) {

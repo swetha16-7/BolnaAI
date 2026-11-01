@@ -13,35 +13,59 @@ export async function GET() {
     const firstDay = new Date(startOfToday);
     firstDay.setUTCDate(firstDay.getUTCDate() - 6);
 
-    const [callsToday, activeAgents, contacts, appointments, recentCalls, weeklyCalls, durationStats, totalCalls] =
-      await Promise.all([
-        prisma.call.count({
-          where: { ...organizationScope(organization.id), createdAt: { gte: startOfToday } },
-        }),
-        prisma.agent.count({
-          where: { ...organizationScope(organization.id), status: "active" },
-        }),
-        prisma.contact.count({ where: organizationScope(organization.id) }),
-        prisma.appointment.count({ where: organizationScope(organization.id) }),
-        prisma.call.findMany({
-          where: organizationScope(organization.id),
-          select: callSummarySelect,
-          orderBy: { createdAt: "desc" },
-          take: 5,
-        }),
-        prisma.call.findMany({
-          where: { ...organizationScope(organization.id), createdAt: { gte: firstDay } },
-          select: { createdAt: true, direction: true },
-        }),
-        prisma.call.aggregate({
-          where: {
-            ...organizationScope(organization.id),
-            durationSeconds: { not: null },
-          },
-          _avg: { durationSeconds: true },
-        }),
-        prisma.call.count({ where: organizationScope(organization.id) }),
-      ]);
+    const [
+      callsToday,
+      activeAgents,
+      totalAgents,
+      pausedAgents,
+      successfulCalls,
+      failedCalls,
+      contacts,
+      appointments,
+      recentCalls,
+      weeklyCalls,
+      durationStats,
+      totalCalls,
+    ] = await Promise.all([
+      prisma.call.count({
+        where: { ...organizationScope(organization.id), createdAt: { gte: startOfToday } },
+      }),
+      prisma.agent.count({
+        where: { ...organizationScope(organization.id), status: "active" },
+      }),
+      prisma.agent.count({
+        where: organizationScope(organization.id),
+      }),
+      prisma.agent.count({
+        where: { ...organizationScope(organization.id), status: "paused" },
+      }),
+      prisma.call.count({
+        where: { ...organizationScope(organization.id), status: "completed" },
+      }),
+      prisma.call.count({
+        where: { ...organizationScope(organization.id), status: { in: ["failed", "canceled", "error"] } },
+      }),
+      prisma.contact.count({ where: organizationScope(organization.id) }),
+      prisma.appointment.count({ where: organizationScope(organization.id) }),
+      prisma.call.findMany({
+        where: organizationScope(organization.id),
+        select: callSummarySelect,
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      }),
+      prisma.call.findMany({
+        where: { ...organizationScope(organization.id), createdAt: { gte: firstDay } },
+        select: { createdAt: true, direction: true },
+      }),
+      prisma.call.aggregate({
+        where: {
+          ...organizationScope(organization.id),
+          durationSeconds: { not: null },
+        },
+        _avg: { durationSeconds: true },
+      }),
+      prisma.call.count({ where: organizationScope(organization.id) }),
+    ]);
 
     const callsByDay = Array.from({ length: 7 }, (_, index) => {
       const day = new Date(firstDay);
@@ -62,6 +86,10 @@ export async function GET() {
       metrics: {
         callsToday,
         activeAgents,
+        totalAgents,
+        pausedAgents,
+        successfulCalls,
+        failedCalls,
         contacts,
         appointments,
         averageDurationSeconds: durationStats._avg.durationSeconds === null

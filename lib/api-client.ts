@@ -186,6 +186,10 @@ export interface ApiDashboard {
   metrics: {
     callsToday: number;
     activeAgents: number;
+    totalAgents?: number;
+    pausedAgents?: number;
+    successfulCalls?: number;
+    failedCalls?: number;
     contacts: number;
     appointments: number;
     averageDurationSeconds: number | null;

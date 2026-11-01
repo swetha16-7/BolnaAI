@@ -266,12 +266,17 @@ export const AnalyticsView: React.FC = () => {
     }));
   }, [uniqueCalls, now]);
 
-  // 8. Agent Performance (Strictly unique agent names)
+  // 8. Agent Performance (Strictly unique agent names for current non-deleted agents)
   const agentPerformanceData = useMemo(() => {
+    const currentAgentNames = new Set(agents.map((a) => a.name));
     const agentMap = new Map<string, { total: number; completed: number }>();
 
     for (const call of uniqueCalls) {
       const name = call.agentName || "Agent";
+      // Exclude deleted agents from current agent comparisons
+      if (currentAgentNames.size > 0 && !currentAgentNames.has(name)) {
+        continue;
+      }
       const existing = agentMap.get(name) ?? { total: 0, completed: 0 };
       existing.total += 1;
       if (call.status === "completed") {

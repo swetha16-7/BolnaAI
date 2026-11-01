@@ -95,6 +95,13 @@ export const CrmView: React.FC = () => {
 
   const callAgents = agents.filter((agent) => agent.status === "active" && agent.retellAgentId.trim());
 
+  // Synchronize callAgentId if selected agent was deleted
+  useEffect(() => {
+    if (callAgentId && !callAgents.some((a) => a.id === callAgentId)) {
+      setCallAgentId(callAgents[0]?.id ?? "");
+    }
+  }, [callAgents, callAgentId]);
+
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       void loadContacts(

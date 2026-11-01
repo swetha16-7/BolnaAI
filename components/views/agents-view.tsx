@@ -72,6 +72,14 @@ export const AgentsView: React.FC = () => {
   const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to permanently delete this AI agent? This action cannot be undone.")) {
       await deleteAgent(id);
+      setSelectedLocalAgents((prev) => {
+        const next = { ...prev };
+        for (const [key, val] of Object.entries(next)) {
+          if (val === id) delete next[key];
+        }
+        return next;
+      });
+      void loadRetellAgents();
     }
   };
 

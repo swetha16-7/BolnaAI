@@ -91,6 +91,22 @@ export const CallHistoryView: React.FC = () => {
     ? callAgentId
     : callAgents[0]?.id ?? "";
 
+  // Reset agentFilter if the filtered agent was deleted
+  useEffect(() => {
+    if (agentFilter && !agents.some((a) => a.id === agentFilter)) {
+      setAgentFilter("");
+      setRetellCursorStack([null]);
+      setRetellPage(1);
+    }
+  }, [agents, agentFilter]);
+
+  // Synchronize callAgentId if selected agent was deleted
+  useEffect(() => {
+    if (callAgentId && !callAgents.some((a) => a.id === callAgentId)) {
+      setCallAgentId(callAgents[0]?.id ?? "");
+    }
+  }, [callAgents, callAgentId]);
+
   const handleMakeCall = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setCallError(null);
