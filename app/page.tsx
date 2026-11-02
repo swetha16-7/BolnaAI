@@ -34,7 +34,6 @@ import { AnalyticsView } from "@/components/views/analytics-view";
 import { SettingsView } from "@/components/views/settings-view";
 import { ProfileView } from "@/components/views/profile-view";
 import TeamPage from "@/app/(admin)/team/page";
-import BillingPage from "@/app/(admin)/billing/page";
 import { AuthView } from "@/components/auth/auth-view";
 
 type RouteProps = { editId?: string | null };
@@ -49,7 +48,6 @@ const routeConfig: Record<string, { breadcrumb: string; component: React.Compone
   "teams": { breadcrumb: "Teams", component: TeamPage },
   "analytics": { breadcrumb: "Analytics", component: AnalyticsView },
   "settings": { breadcrumb: "Settings & Integrations", component: SettingsView },
-  "billing": { breadcrumb: "Billing", component: BillingPage },
   "profile": { breadcrumb: "Admin Profile", component: ProfileView }
 };
 
@@ -332,20 +330,6 @@ export default function Home() {
               >
                 <SettingsIcon size={18} />
                 <span>Settings</span>
-              </a>
-            </li>
-            <li>
-              <a
-                href="#/billing"
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigateToRoute("billing");
-                }}
-                className={`nav-item ${activeRoute === "billing" ? "active" : ""}`}
-                data-page="billing"
-              >
-                <Layers size={18} />
-                <span>Billing</span>
               </a>
             </li>
             <li>

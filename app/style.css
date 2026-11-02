@@ -871,56 +871,6 @@ body.dark-theme .notification-item:hover {
   transition: var(--transition-smooth);
 }
 
-.billing-page {
-  background: linear-gradient(180deg, rgba(245, 246, 255, 0.9) 0%, rgba(255, 255, 255, 0.95) 45%, rgba(248, 250, 252, 1) 100%);
-  padding: 1rem 0 2rem;
-}
-
-.billing-grid {
-  display: grid;
-  gap: 1.5rem;
-}
-
-.billing-card {
-  border-radius: 1.5rem;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.12);
-  overflow: hidden;
-}
-
-.billing-usage-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
-}
-
-.billing-invoices-card {
-  background: rgba(255, 255, 255, 0.98);
-}
-
-.billing-action-btn {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff;
-  box-shadow: 0 18px 30px rgba(99, 102, 241, 0.18);
-}
-
-.usage-row {
-  padding: 0.85rem 0.8rem;
-  background: rgba(248, 250, 252, 0.88);
-  border-radius: 1rem;
-  border: 1px solid rgba(99, 102, 241, 0.08);
-}
-
-.invoice-row {
-  transition: background-color 0.2s ease;
-}
-
-.invoice-row:hover {
-  background-color: rgba(99, 102, 241, 0.04);
-}
-
-.invoice-download-btn {
-  color: #4f46e5;
-}
 .panel-card:hover {
   transform: translateY(-2px);
   border-color: rgba(99, 102, 241, 0.2);

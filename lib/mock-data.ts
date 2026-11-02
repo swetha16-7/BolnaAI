@@ -264,17 +264,3 @@ export const roles = [
   { name: "Operator", permissions: "Monitor calls, manage CRM", users: 3 },
   { name: "Viewer", permissions: "Read-only access", users: 5 },
 ];
-
-export const invoices = [
-  { id: "INV-2026-06", date: "2026-06-01", amount: "$499.00", status: "Paid" },
-  { id: "INV-2026-05", date: "2026-05-01", amount: "$499.00", status: "Paid" },
-  { id: "INV-2026-04", date: "2026-04-01", amount: "$499.00", status: "Paid" },
-  { id: "INV-2026-03", date: "2026-03-01", amount: "$399.00", status: "Paid" },
-];
-
-export const usageStats = [
-  { label: "Call Minutes", used: 8420, limit: 10000, unit: "min" },
-  { label: "API Requests", used: 125000, limit: 200000, unit: "req" },
-  { label: "Storage", used: 4.2, limit: 10, unit: "GB" },
-  { label: "Active Agents", used: 8, limit: 15, unit: "agents" },
-];
