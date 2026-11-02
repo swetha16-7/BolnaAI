@@ -5,7 +5,6 @@ import { KpiCard } from "@/components/shared/kpi-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { CallStatisticsChart } from "@/components/charts/call-statistics-chart";
 import { LanguageAnalyticsChart } from "@/components/charts/language-analytics-chart";
-import { RevenueOverviewChart } from "@/components/charts/revenue-overview-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -81,9 +80,6 @@ export const DashboardView = () => {
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <CallStatisticsChart data={dashboard?.callsByDay ?? []} />
         <LanguageAnalyticsChart />
-      </div>
-      <div className="mt-6">
-        <RevenueOverviewChart />
       </div>
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Card className="border-border/60">

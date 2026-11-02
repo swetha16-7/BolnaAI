@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 
 import { requireOrganizationAccess } from "@/lib/server/auth/organization";
 import {
-  createRetellClient,
   getRetellContactListFailure,
-  listRetellContacts,
 } from "@/lib/server/calls/retell";
+import { getAuthoritativeRetellContacts } from "@/lib/server/calls/retell-contacts";
 import { getRetellApiKey } from "@/lib/server/providers/configuration";
 import { prisma } from "@/lib/server/db";
 import { apiErrorResponse } from "@/lib/server/http";
@@ -39,28 +38,9 @@ export async function GET(request: Request) {
     }
 
     try {
-      const result = await listRetellContacts(createRetellClient(apiKey), {
-        limit: pageSize,
-        ...(paginationKey ? { paginationKey } : {}),
-      });
-      const phones = [...new Set(result.contacts.map((contact) => contact.phoneNumber))];
-      const otherOrgContacts = phones.length === 0
-        ? []
-        : await prisma.contact.findMany({
-            where: {
-              phone: { in: phones },
-              organizationId: { not: organization.id },
-            },
-            select: { phone: true },
-          });
-      const otherOrgPhones = new Set(
-        otherOrgContacts
-          .map((contact) => contact.phone)
-          .filter((phone): phone is string => Boolean(phone)),
-      );
-      const contacts = result.contacts.filter(
-        (contact) => !otherOrgPhones.has(contact.phoneNumber),
-      );
+      const authorizedContacts = await getAuthoritativeRetellContacts(organization.id);
+      const phones = [...new Set(authorizedContacts.map((contact) => contact.phoneNumber))];
+      const contacts = authorizedContacts;
 
       const localCrmContacts = phones.length === 0
         ? []
@@ -191,10 +171,18 @@ export async function GET(request: Request) {
         filteredContacts = filteredContacts.filter((c) => !c.doNotCall);
       }
 
+      const pageParam = parseInt(searchParams.get("page") ?? "1", 10);
+      const page = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1;
+      const skip = (page - 1) * pageSize;
+      const pageContacts = filteredContacts.slice(skip, skip + pageSize);
+      const total = filteredContacts.length;
+      const hasMore = skip + pageSize < total;
+
       return NextResponse.json({
-        contacts: filteredContacts,
-        hasMore: result.hasMore,
-        nextCursor: result.nextCursor,
+        contacts: pageContacts,
+        total,
+        hasMore,
+        nextCursor: null,
       }, {
         headers: { "Cache-Control": "no-store" },
       });

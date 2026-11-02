@@ -605,11 +605,14 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const providerResult = await api.retellContacts.list(params);
         if (Array.isArray(providerResult.contacts)) {
           setContacts(providerResult.contacts.map(mapRetellContact));
+          const total = typeof providerResult.total === "number"
+            ? providerResult.total
+            : providerResult.contacts.length;
           setContactsPagination({
             page,
             pageSize,
-            total: providerResult.contacts.length,
-            totalPages: providerResult.hasMore ? page + 1 : 1,
+            total,
+            totalPages: Math.max(1, Math.ceil(total / pageSize)),
           });
           loadedFromProvider = true;
         }
@@ -915,6 +918,7 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setContacts((previous) => [mapContact(result.contact), ...previous]);
       showToast("Contact saved.", "success");
       void refreshDashboard();
+      void loadContacts();
       return true;
     } catch (error) {
       reportMutationError(error, "Unable to create contact.");
@@ -929,6 +933,7 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setContacts((previous) => previous.map((item) => item.id === id ? updated : item));
       showToast("Contact updated.", "success");
       void refreshDashboard();
+      void loadContacts();
       return true;
     } catch (error) {
       reportMutationError(error, "Unable to update contact.");
@@ -942,6 +947,7 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setContacts((previous) => previous.map((item) => item.id === id ? { ...item, status: "inactive" } : item));
       showToast("Contact archived.", "success");
       void refreshDashboard();
+      void loadContacts();
       return true;
     } catch (error) {
       reportMutationError(error, "Unable to archive contact.");

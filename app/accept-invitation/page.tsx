@@ -43,8 +43,8 @@ export default function AcceptInvitationPage() {
         {accepted ? (
           <div className="mt-5 grid gap-4">
             <p role="status" className="text-sm text-emerald-300">Invitation accepted. Your organization membership is ready.</p>
-            <Link className="rounded-md bg-indigo-600 px-4 py-2 text-center text-sm font-medium text-white" href="/#/teams">
-              Open Team Management
+            <Link className="rounded-md bg-indigo-600 px-4 py-2 text-center text-sm font-medium text-white" href="/">
+              Open Console
             </Link>
           </div>
         ) : (

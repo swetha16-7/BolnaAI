@@ -180,6 +180,7 @@ export interface ApiRetellContactPage {
   contacts: ApiRetellContact[];
   hasMore: boolean;
   nextCursor: string | null;
+  total?: number;
 }
 
 export interface ApiDashboard {

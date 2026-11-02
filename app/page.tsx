@@ -9,9 +9,7 @@ import {
   PhoneCall,
   History,
   BarChart3,
-  Settings as SettingsIcon,
   Layers,
-  Users,
   User,
   LogOut,
   Bell,
@@ -31,9 +29,7 @@ import { CallHistoryView } from "@/components/views/call-history-view";
 import { CrmView } from "@/components/views/crm-view";
 import { ContactsView } from "@/components/views/contacts-view";
 import { AnalyticsView } from "@/components/views/analytics-view";
-import { SettingsView } from "@/components/views/settings-view";
 import { ProfileView } from "@/components/views/profile-view";
-import TeamPage from "@/app/(admin)/team/page";
 import { AuthView } from "@/components/auth/auth-view";
 
 type RouteProps = { editId?: string | null };
@@ -45,9 +41,7 @@ const routeConfig: Record<string, { breadcrumb: string; component: React.Compone
   "crm": { breadcrumb: "CRM", component: CrmView },
   "contacts": { breadcrumb: "Contacts", component: ContactsView },
   "call-history": { breadcrumb: "Call History", component: CallHistoryView },
-  "teams": { breadcrumb: "Teams", component: TeamPage },
   "analytics": { breadcrumb: "Analytics", component: AnalyticsView },
-  "settings": { breadcrumb: "Settings & Integrations", component: SettingsView },
   "profile": { breadcrumb: "Admin Profile", component: ProfileView }
 };
 
@@ -304,32 +298,12 @@ export default function Home() {
             </li>
             <li>
               <a
-                href="#/teams"
-                className={`nav-item ${activeRoute === "teams" ? "active" : ""}`}
-                data-page="teams"
-              >
-                <Users size={18} />
-                <span>Teams</span>
-              </a>
-            </li>
-            <li>
-              <a
                 href="#/analytics"
                 className={`nav-item ${activeRoute === "analytics" ? "active" : ""}`}
                 data-page="analytics"
               >
                 <BarChart3 size={18} />
                 <span>Analytics</span>
-              </a>
-            </li>
-            <li>
-              <a
-                href="#/settings"
-                className={`nav-item ${activeRoute === "settings" ? "active" : ""}`}
-                data-page="settings"
-              >
-                <SettingsIcon size={18} />
-                <span>Settings</span>
               </a>
             </li>
             <li>

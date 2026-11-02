@@ -4,6 +4,7 @@ import { requireOrganizationAccess } from "@/lib/server/auth/organization";
 import { apiErrorResponse } from "@/lib/server/http";
 import { organizationScope } from "@/lib/server/auth/tenant-scope";
 import { callSummarySelect } from "@/lib/server/selects";
+import { getAuthoritativeContactCount } from "@/lib/server/calls/retell-contacts";
 
 export async function GET(request: Request) {
   try {
@@ -87,7 +88,7 @@ export async function GET(request: Request) {
           status: { in: ["failed", "canceled", "error"] },
         },
       }),
-      prisma.contact.count({ where: organizationScope(organization.id) }),
+      getAuthoritativeContactCount(organization.id),
       prisma.appointment.count({
         where: {
           ...organizationScope(organization.id),
