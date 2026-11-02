@@ -18,10 +18,6 @@ export const ProfileView: React.FC = () => {
   const [passNew, setPassNew] = useState("");
   const [passConfirm, setPassConfirm] = useState("");
 
-  // Notification preferences mock checkboxes
-  const [prefSms, setPrefSms] = useState(true);
-  const [prefDaily, setPrefDaily] = useState(true);
-  const [prefSlack, setPrefSlack] = useState(true);
 
   // Avatar states
   const [avatarSrc, setAvatarSrc] = useState(
@@ -225,49 +221,6 @@ export const ProfileView: React.FC = () => {
             </button>
           </div>
 
-          {/* Card 3: Notifications Preferences */}
-          <div className="panel-card">
-            <h3 className="panel-title mb-4">Notification Preferences</h3>
-            <div className="preferences-list">
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={prefSms}
-                  onChange={(e) => setPrefSms(e.target.checked)}
-                />
-                <div className="checkbox-label-group">
-                  <span className="pref-title">Critical SMS Alerts</span>
-                  <span className="pref-desc">
-                    Receive immediate text notices for high-risk sentiment phone spikes or system service down.
-                  </span>
-                </div>
-              </label>
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={prefDaily}
-                  onChange={(e) => setPrefDaily(e.target.checked)}
-                />
-                <div className="checkbox-label-group">
-                  <span className="pref-title">Daily Summary Emails</span>
-                  <span className="pref-desc">
-                    A detailed daily PDF digest detailing call count, active agent performance charts, and cost totals.
-                  </span>
-                </div>
-              </label>
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={prefSlack}
-                  onChange={(e) => setPrefSlack(e.target.checked)}
-                />
-                <div className="checkbox-label-group">
-                  <span className="pref-title">Slack Pipeline Webhook Notifications</span>
-                  <span className="pref-desc">Sync call center alert triggers to your engineering Slack channel.</span>
-                </div>
-              </label>
-            </div>
-          </div>
         </div>
 
         {/* Right Side Audit Trail & Activity Logs */}

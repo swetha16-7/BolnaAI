@@ -260,67 +260,48 @@ export const ContactsView: React.FC = () => {
   };
 
   return (
-    <div
-      className="p-6 md:p-8 space-y-7 max-w-7xl mx-auto min-h-screen"
-      style={{ backgroundColor: "#f6f8fc" }}
-    >
-      {/* 2. Contacts Page Header */}
+    <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto min-h-screen bg-slate-50/50">
+      {/* 1. Contacts Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-1">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "#17233d" }}>
-            Contacts
-          </h1>
-          <p className="text-sm mt-1" style={{ color: "#64748b" }}>
+        <div className="space-y-1">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+              Contacts
+            </h1>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {contactsPagination.total} {contactsPagination.total === 1 ? "contact" : "contacts"}
+            </span>
+          </div>
+          <p className="text-sm text-slate-500 max-w-2xl">
             Manage your contacts, review conversations, and keep customer details organized.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span
-            className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold border shadow-2xs"
-            style={{
-              backgroundColor: "#f1f5f9",
-              color: "#334155",
-              borderColor: "#e2e8f0",
-            }}
-          >
-            {contactsPagination.total} {contactsPagination.total === 1 ? "contact" : "contacts"}
-          </span>
+        <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-white shadow-sm hover:opacity-90 transition-opacity cursor-pointer"
-            style={{
-              backgroundColor: "#4f46e5",
-              color: "#ffffff",
-            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 shadow-sm transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             onClick={beginCreate}
           >
-            <Plus className="h-4 w-4" style={{ color: "#ffffff" }} />
+            <Plus className="h-4 w-4 text-white" />
             <span>Add Contact</span>
           </button>
         </div>
       </div>
 
-      {/* Main Contacts Card (Toolbar + Table) */}
-      <div
-        className="rounded-xl shadow-xs overflow-hidden"
-        style={{ backgroundColor: "#ffffff", border: "1px solid #e2e8f0" }}
-      >
-        {/* 3. Search and Filter Toolbar inside the card */}
-        <div className="p-4 sm:p-5 border-b" style={{ borderColor: "#f1f5f9" }}>
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      {/* Main Contacts Card (Toolbar + Table + Pagination) */}
+      <div className="rounded-xl bg-white border border-slate-200/80 shadow-xs overflow-hidden">
+        {/* 2. Search and Filter Toolbar inside card */}
+        <div className="p-4 sm:p-5 bg-white border-b border-slate-100">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5">
             <div className="flex flex-1 flex-wrap items-center gap-3">
-              {/* Search input */}
-              <div className="relative flex-1 min-w-[260px] max-w-md">
+              {/* Search input with generous width and proper icon spacing */}
+              <div className="relative flex-1 min-w-[280px] max-w-md">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
                   aria-label="Search contacts"
-                  className="h-10 w-full rounded-lg pl-10 pr-4 text-xs sm:text-sm outline-none transition-colors"
-                  style={{
-                    backgroundColor: "#ffffff",
-                    color: "#17233d",
-                    border: "1px solid #e2e8f0",
-                  }}
+                  className="h-10 w-full rounded-lg pl-10 pr-4 text-sm bg-white text-slate-900 border border-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                   placeholder="Search by name, phone, email, or contact ID..."
                   value={search}
                   onChange={(e) => {
@@ -333,12 +314,7 @@ export const ContactsView: React.FC = () => {
               {/* Status filter */}
               <select
                 aria-label="Filter contacts by status"
-                className="h-10 rounded-lg px-3 text-xs sm:text-sm font-medium outline-none cursor-pointer"
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#334155",
-                  border: "1px solid #e2e8f0",
-                }}
+                className="h-10 rounded-lg px-3.5 text-sm font-medium bg-white text-slate-700 border border-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all cursor-pointer hover:border-slate-300"
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
@@ -356,12 +332,7 @@ export const ContactsView: React.FC = () => {
               {/* Source/Category filter */}
               <select
                 aria-label="Filter by category"
-                className="h-10 rounded-lg px-3 text-xs sm:text-sm font-medium outline-none cursor-pointer"
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#334155",
-                  border: "1px solid #e2e8f0",
-                }}
+                className="h-10 rounded-lg px-3.5 text-sm font-medium bg-white text-slate-700 border border-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all cursor-pointer hover:border-slate-300"
                 value={dncFilter}
                 onChange={(e) => {
                   setDncFilter(e.target.value);
@@ -375,31 +346,21 @@ export const ContactsView: React.FC = () => {
             </div>
 
             {/* Right toolbar actions: Refresh and Clear Filters */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 self-end lg:self-auto">
               <button
                 type="button"
                 onClick={() => void loadContacts(search, statusFilter, currentPage, pageSize, dncFilter)}
                 disabled={contactsLoading}
                 title="Refresh contacts"
-                className="inline-flex items-center justify-center h-10 w-10 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors shadow-2xs"
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#334155",
-                  border: "1px solid #e2e8f0",
-                }}
+                className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
               >
-                <RefreshCw className={`h-4 w-4 ${contactsLoading ? "animate-spin" : ""}`} style={{ color: "#334155" }} />
+                <RefreshCw className={`h-4 w-4 ${contactsLoading ? "animate-spin text-indigo-600" : ""}`} />
               </button>
 
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-xs font-semibold cursor-pointer hover:bg-slate-50 transition-colors shadow-2xs"
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#17233d",
-                  border: "1px solid #e2e8f0",
-                }}
+                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-lg text-sm font-medium bg-white border border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
               >
                 <span>Clear Filters</span>
               </button>
@@ -407,11 +368,11 @@ export const ContactsView: React.FC = () => {
           </div>
         </div>
 
-        {/* 4. Contacts Table */}
+        {/* 3. Contacts Table */}
         <div className="overflow-x-auto">
           <Table className="w-full text-left border-collapse">
-            <TableHeader className="bg-slate-50/80 border-b border-slate-200 [&_th]:py-3.5 [&_th]:px-5 [&_th]:text-[11px] [&_th]:font-bold [&_th]:uppercase [&_th]:tracking-wider [&_th]:text-slate-600">
-              <TableRow style={{ backgroundColor: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+            <TableHeader className="bg-slate-50/80 border-b border-slate-200/80 [&_th]:py-3.5 [&_th]:px-6 [&_th]:text-[11px] [&_th]:font-bold [&_th]:uppercase [&_th]:tracking-wider [&_th]:text-slate-500">
+              <TableRow className="border-b border-slate-200/80 bg-slate-50/70 hover:bg-slate-50/70">
                 <TableHead>Phone Number</TableHead>
                 <TableHead>Contact ID</TableHead>
                 <TableHead>Conversations</TableHead>
@@ -422,13 +383,13 @@ export const ContactsView: React.FC = () => {
             <TableBody>
               {contactsLoading ? (
                 Array.from({ length: 5 }).map((_, idx) => (
-                  <TableRow key={`skeleton-${idx}`}>
-                    <TableCell colSpan={5} className="py-6 px-5">
-                      <div className="flex items-center gap-3 animate-pulse">
-                        <div className="h-8 w-8 rounded-full bg-slate-200" />
+                  <TableRow key={`skeleton-${idx}`} className="border-b border-slate-100">
+                    <TableCell colSpan={5} className="py-5 px-6">
+                      <div className="flex items-center gap-4 animate-pulse">
+                        <div className="h-9 w-9 rounded-full bg-slate-200" />
                         <div className="flex-1 space-y-2">
                           <div className="h-4 w-1/4 rounded bg-slate-200" />
-                          <div className="h-3 w-1/6 rounded bg-slate-200" />
+                          <div className="h-3 w-1/6 rounded bg-slate-100" />
                         </div>
                       </div>
                     </TableCell>
@@ -436,16 +397,11 @@ export const ContactsView: React.FC = () => {
                 ))
               ) : contactsError ? (
                 <TableRow>
-                  <TableCell colSpan={5} role="alert" className="py-12 px-5 text-center text-red-500">
+                  <TableCell colSpan={5} role="alert" className="py-14 px-6 text-center text-rose-600">
                     <p className="font-semibold text-base">{contactsError}</p>
                     <button
                       type="button"
-                      className="mt-3 inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer hover:bg-slate-100"
-                      style={{
-                        backgroundColor: "#ffffff",
-                        color: "#0f172a",
-                        border: "1px solid #cbd5e1",
-                      }}
+                      className="mt-3.5 inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold bg-white text-slate-800 border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
                       onClick={() => void loadContacts(search, statusFilter, currentPage, pageSize, dncFilter)}
                     >
                       Retry
@@ -454,44 +410,36 @@ export const ContactsView: React.FC = () => {
                 </TableRow>
               ) : contacts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-16 px-5 text-center text-slate-500">
+                  <TableCell colSpan={5} className="py-16 px-6 text-center text-slate-500">
                     {isFiltered ? (
-                      <div className="space-y-3">
+                      <div className="space-y-3 max-w-md mx-auto">
                         <p className="font-semibold text-slate-900 text-base">No contacts match your filters</p>
-                        <p className="text-sm">Try adjusting your search query or clearing applied filters.</p>
+                        <p className="text-sm text-slate-500">Try adjusting your search query or clearing applied filters.</p>
                         <button
                           type="button"
                           onClick={handleClearFilters}
-                          className="inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer hover:bg-slate-100"
-                          style={{
-                            backgroundColor: "#ffffff",
-                            color: "#0f172a",
-                            border: "1px solid #cbd5e1",
-                          }}
+                          className="mt-2 inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold bg-white text-slate-800 border border-slate-300 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
                         >
                           Clear Filters
                         </button>
                       </div>
                     ) : (
-                      <div className="space-y-4 max-w-md mx-auto">
-                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+                      <div className="space-y-4 max-w-md mx-auto py-4">
+                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-600 border border-slate-200/60 shadow-2xs">
                           <User className="h-7 w-7" />
                         </div>
-                        <p className="font-bold text-slate-900 text-lg">No contacts found</p>
-                        <p className="text-sm text-slate-500">
-                          Start building your directory by adding customer details and conversation records.
-                        </p>
+                        <div>
+                          <p className="font-bold text-slate-900 text-lg">No contacts found</p>
+                          <p className="text-sm text-slate-500 mt-1">
+                            Start building your directory by adding customer details and conversation records.
+                          </p>
+                        </div>
                         <button
                           type="button"
-                          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm cursor-pointer hover:bg-slate-100"
-                          style={{
-                            backgroundColor: "#ffffff",
-                            color: "#0f172a",
-                            border: "1px solid #cbd5e1",
-                          }}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 transition-all shadow-sm cursor-pointer"
                           onClick={beginCreate}
                         >
-                          <Plus className="h-4 w-4" style={{ color: "#0f172a" }} />
+                          <Plus className="h-4 w-4 text-white" />
                           <span>Add Contact</span>
                         </button>
                       </div>
@@ -507,43 +455,44 @@ export const ContactsView: React.FC = () => {
                     <TableRow
                       key={contact.id}
                       onClick={() => setSelectedContact(contact)}
-                      className="cursor-pointer hover:bg-slate-50/80 transition-colors h-12"
-                      style={{ borderBottom: "1px solid #f1f5f9" }}
+                      className="cursor-pointer hover:bg-slate-50/80 transition-colors h-16 border-b border-slate-100 group"
                     >
-
-                      {/* 2. Phone Number */}
-                      <TableCell className="py-3 px-5">
+                      {/* 1. Phone Number */}
+                      <TableCell className="py-4 px-6">
                         {contact.phone ? (
-                          <div className="flex items-center gap-2 text-xs sm:text-sm font-mono text-slate-800">
-                            <Phone className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-                            <span>{contact.phone}</span>
-                            {contact.doNotCall && (
-                              <span
-                                className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-bold"
-                                style={{ backgroundColor: "#fee2e2", color: "#dc2626", border: "1px solid #fca5a5" }}
-                              >
-                                DNC
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50/80 text-indigo-600 border border-indigo-100/60">
+                              <Phone className="h-4 w-4" />
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-sm font-semibold text-slate-900 tracking-tight">
+                                {contact.phone}
                               </span>
-                            )}
+                              {contact.doNotCall && (
+                                <span className="inline-flex items-center rounded-md bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 border border-rose-200/80">
+                                  DNC
+                                </span>
+                              )}
+                            </div>
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-sm">—</span>
+                          <span className="text-slate-400 text-sm font-normal">—</span>
                         )}
                       </TableCell>
 
-                      {/* 3. Contact ID */}
-                      <TableCell className="py-3 px-5" onClick={(e) => e.stopPropagation()}>
+                      {/* 2. Contact ID */}
+                      <TableCell className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
                           <span
-                            className="rounded px-2.5 py-1 font-mono text-xs font-medium"
-                            style={{ backgroundColor: "#f8fafc", color: "#334155", border: "1px solid #e2e8f0" }}
+                            className="inline-flex items-center rounded-md px-2.5 py-1 font-mono text-xs font-medium bg-slate-50 text-slate-600 border border-slate-200/80 shadow-2xs max-w-[140px] truncate"
+                            title={contact.id}
                           >
                             {contact.id.length > 14 ? `${contact.id.slice(0, 14)}...` : contact.id}
                           </span>
                           <button
                             type="button"
                             aria-label="Copy Contact ID"
-                            className="rounded p-1 hover:bg-slate-100 transition-colors cursor-pointer text-slate-500"
+                            className="rounded-md p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
                             onClick={() => handleCopy(contact.id, "Contact ID")}
                             title="Copy Contact ID"
                           >
@@ -556,20 +505,17 @@ export const ContactsView: React.FC = () => {
                         </div>
                       </TableCell>
 
-                      {/* 4. Conversations Count */}
-                      <TableCell className="py-3 px-5">
-                        <span
-                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                          style={{ backgroundColor: "#eff6ff", color: "#2563eb", border: "1px solid #dbeafe" }}
-                        >
+                      {/* 3. Conversations */}
+                      <TableCell className="py-4 px-6">
+                        <span className="inline-flex items-center rounded-full px-3 py-0.5 text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100/80 shadow-2xs">
                           {conversationsCount}
                         </span>
                       </TableCell>
 
-                      {/* 5. Last Conversation */}
-                      <TableCell className="py-3 px-5">
+                      {/* 4. Last Conversation */}
+                      <TableCell className="py-4 px-6">
                         {contact.lastConversationAt ? (
-                          <span className="text-xs sm:text-sm text-slate-700">
+                          <span className="text-sm font-normal text-slate-600">
                             {formatDateTime(contact.lastConversationAt)}
                           </span>
                         ) : (
@@ -577,51 +523,36 @@ export const ContactsView: React.FC = () => {
                         )}
                       </TableCell>
 
-                      {/* 6. Actions (View, Edit, Delete) */}
-                      <TableCell className="py-3 px-5 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
+                      {/* 5. Actions (View, Edit, Delete) */}
+                      <TableCell className="py-4 px-6 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer hover:bg-slate-50 transition-colors shadow-2xs"
-                            style={{
-                              backgroundColor: "#ffffff",
-                              color: "#1e293b",
-                              border: "1px solid #e2e8f0",
-                            }}
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300 transition-all shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-300/40"
                             onClick={() => setSelectedContact(contact)}
                             title="View Contact Details"
                           >
-                            <Eye className="h-3.5 w-3.5" style={{ color: "#1e293b" }} />
+                            <Eye className="h-3.5 w-3.5 text-slate-500" />
                             <span>View</span>
                           </button>
 
                           <button
                             type="button"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer hover:bg-slate-50 transition-colors shadow-2xs"
-                            style={{
-                              backgroundColor: "#ffffff",
-                              color: "#1e293b",
-                              border: "1px solid #e2e8f0",
-                            }}
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300 transition-all shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-300/40"
                             onClick={() => beginEdit(contact)}
                             title="Edit Contact"
                           >
-                            <Pencil className="h-3.5 w-3.5" style={{ color: "#1e293b" }} />
+                            <Pencil className="h-3.5 w-3.5 text-slate-500" />
                             <span>Edit</span>
                           </button>
 
                           <button
                             type="button"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer hover:bg-red-100 transition-colors shadow-2xs"
-                            style={{
-                              backgroundColor: "#fee2e2",
-                              color: "#dc2626",
-                              border: "1px solid #fecaca",
-                            }}
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium text-rose-600 bg-rose-50/70 border border-rose-200/80 hover:bg-rose-100 hover:text-rose-700 hover:border-rose-300 transition-all shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-500/20"
                             onClick={() => setArchivingContact(contact)}
                             title="Delete Contact"
                           >
-                            <Trash2 className="h-3.5 w-3.5" style={{ color: "#dc2626" }} />
+                            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
                             <span>Delete</span>
                           </button>
                         </div>
@@ -634,44 +565,31 @@ export const ContactsView: React.FC = () => {
           </Table>
         </div>
 
-        {/* Pagination bar */}
+        {/* 4. Pagination bar */}
         {contactsPagination.totalPages > 1 && (
-          <div
-            className="flex items-center justify-between px-6 py-4 text-sm"
-            style={{ backgroundColor: "#f8fafc", borderTop: "1px solid #e2e8f0" }}
-          >
-            <span className="text-slate-600 text-xs sm:text-sm">
-              Showing page <strong className="text-slate-900">{contactsPagination.page}</strong> of{" "}
-              <strong className="text-slate-900">{contactsPagination.totalPages}</strong> ({contactsPagination.total} total)
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 bg-slate-50/60 border-t border-slate-100 text-sm">
+            <span className="text-slate-500 text-xs sm:text-sm">
+              Showing page <strong className="text-slate-900 font-semibold">{contactsPagination.page}</strong> of{" "}
+              <strong className="text-slate-900 font-semibold">{contactsPagination.totalPages}</strong> ({contactsPagination.total} total)
             </span>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs"
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#0f172a",
-                  border: "1px solid #cbd5e1",
-                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={currentPage <= 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               >
-                <ChevronLeft className="h-3.5 w-3.5" style={{ color: "#0f172a" }} />
+                <ChevronLeft className="h-3.5 w-3.5 text-slate-500" />
                 <span>Previous</span>
               </button>
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-xs"
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#0f172a",
-                  border: "1px solid #cbd5e1",
-                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={currentPage >= contactsPagination.totalPages}
                 onClick={() => setCurrentPage((p) => p + 1)}
               >
                 <span>Next</span>
-                <ChevronRight className="h-3.5 w-3.5" style={{ color: "#0f172a" }} />
+                <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
               </button>
             </div>
           </div>

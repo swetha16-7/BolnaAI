@@ -344,3 +344,31 @@ test("9. Retell contacts route uses getAuthoritativeRetellContacts and returns t
     "Retell contacts route must return total matching count",
   );
 });
+
+test("10. Notification Preferences section is completely removed from ProfileView", () => {
+  const profileFile = fs.readFileSync(
+    path.join(process.cwd(), "components", "views", "profile-view.tsx"),
+    "utf-8",
+  );
+
+  assert.equal(
+    profileFile.includes("Notification Preferences"),
+    false,
+    "Notification Preferences must not appear in profile-view.tsx",
+  );
+  assert.equal(
+    profileFile.includes("prefSms"),
+    false,
+    "prefSms state must not exist in profile-view.tsx",
+  );
+  assert.equal(
+    profileFile.includes("prefDaily"),
+    false,
+    "prefDaily state must not exist in profile-view.tsx",
+  );
+  assert.equal(
+    profileFile.includes("prefSlack"),
+    false,
+    "prefSlack state must not exist in profile-view.tsx",
+  );
+});
