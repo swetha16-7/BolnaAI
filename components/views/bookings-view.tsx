@@ -580,6 +580,13 @@ export const BookingsView: React.FC = () => {
               (meta.notes as string | undefined) ||
               (meta.issueDescription as string | undefined) ||
               null;
+            const cancellationReason =
+              (meta.cancellationReason as string | undefined) ||
+              (meta.rejectionReason as string | undefined) ||
+              null;
+            const cancelledAt =
+              (meta.cancelledAt as string | undefined) ||
+              null;
 
             return (
               <section
@@ -709,6 +716,36 @@ export const BookingsView: React.FC = () => {
                       )}
                     </div>
                   </div>
+
+                  {/* Cancellation Details if cancelled */}
+                  {(selectedBooking.status.toLowerCase() === "cancelled" ||
+                    selectedBooking.status.toLowerCase() === "canceled") && (
+                    <div className="space-y-2.5">
+                      <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#DC2626]">
+                        Cancellation Details
+                      </h3>
+                      <div className="rounded-[14px] border border-[#FECACA] p-3.5 space-y-2 bg-[#FFF8F8] text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-[#991B1B] font-medium">Status:</span>
+                          <span className="font-semibold text-[#DC2626] text-right">Cancelled</span>
+                        </div>
+                        {cancellationReason && (
+                          <div className="flex items-start justify-between gap-2 pt-1.5 border-t border-[#FEE2E2]">
+                            <span className="text-[#991B1B]">Reason:</span>
+                            <span className="font-medium text-[#111827] text-right">{cancellationReason}</span>
+                          </div>
+                        )}
+                        {cancelledAt && (
+                          <div className="flex items-start justify-between gap-2 pt-1.5 border-t border-[#FEE2E2]">
+                            <span className="text-[#991B1B]">Cancelled At:</span>
+                            <span className="text-[#334155] text-right">
+                              {new Date(cancelledAt).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Notes / Description if available */}
                   {notes && (

@@ -217,6 +217,36 @@ export function timingSafeSecretEqual(a?: string | null, b?: string | null): boo
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
+export function verifyCalcomSignature(
+  rawBody: string,
+  signatureHeader: string | null | undefined,
+  secret?: string | null,
+): boolean {
+  if (!secret || !secret.trim()) return true; // If no secret configured, allow (e.g. dev/test)
+  if (!signatureHeader || !signatureHeader.trim()) return false;
+
+  const cleanHeader = signatureHeader.replace(/^sha256=/i, "").replace(/^v1=/i, "").trim();
+
+  // Header may be raw secret or HMAC sha256
+  if (
+    timingSafeSecretEqual(cleanHeader, secret.trim()) ||
+    timingSafeSecretEqual(signatureHeader.trim(), secret.trim())
+  ) {
+    return true;
+  }
+
+  try {
+    const hmac = crypto.createHmac("sha256", secret.trim());
+    const expected = hmac.update(rawBody).digest("hex");
+    return (
+      timingSafeSecretEqual(cleanHeader.toLowerCase(), expected.toLowerCase()) ||
+      timingSafeSecretEqual(signatureHeader.trim().toLowerCase(), expected.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function parseDateString(
   dateStr: string | null | undefined,
   referenceNow?: Date,
@@ -2389,5 +2419,378 @@ export function extractToolPayload<T = Record<string, any>>(body: any): T {
     ...args,
     call: body.call || args.call || null,
   } as T;
+}
+
+export type CalcomExtractedData = {
+  primaryUid: string;
+  candidateIds: string[];
+  cancellationReason: string | null;
+  cancelledBy: string | null;
+  triggerEvent: string;
+  isCancellation: boolean;
+  isReschedule: boolean;
+  isPing: boolean;
+};
+
+export function extractCalcomIdentifiers(payload: any): CalcomExtractedData {
+  if (!payload || typeof payload !== "object") {
+    return {
+      primaryUid: "",
+      candidateIds: [],
+      cancellationReason: null,
+      cancelledBy: null,
+      triggerEvent: "",
+      isCancellation: false,
+      isReschedule: false,
+      isPing: false,
+    };
+  }
+
+  const booking = payload.payload || payload.data || payload.booking || payload;
+  const nestedBooking = (booking.booking && typeof booking.booking === "object" ? booking.booking : {}) as Record<string, any>;
+  const payloadData = (payload.data && typeof payload.data === "object" ? payload.data : {}) as Record<string, any>;
+  const payloadPayload = (payload.payload && typeof payload.payload === "object" ? payload.payload : {}) as Record<string, any>;
+
+  const triggerEvent = String(
+    payload.triggerEvent ||
+    payload.event ||
+    payload.type ||
+    payload.action ||
+    ""
+  ).trim();
+
+  const status = String(
+    booking.status ||
+    payload.status ||
+    nestedBooking.status ||
+    payloadData.status ||
+    payloadPayload.status ||
+    ""
+  ).trim().toUpperCase();
+
+  const upperEvent = triggerEvent.toUpperCase();
+  const isPing = upperEvent === "PING";
+  const isReschedule = !isPing && upperEvent.includes("RESCHEDULE");
+  const isCancellation =
+    !isPing &&
+    !isReschedule &&
+    (upperEvent.includes("CANCEL") ||
+      upperEvent.includes("REJECT") ||
+      status === "CANCELLED" ||
+      status === "CANCELED" ||
+      status === "REJECTED");
+
+  const rawCandidateIds = [
+    booking.uid,
+    booking.bookingUid,
+    booking.booking_uid,
+    booking.id,
+    booking.bookingId,
+    booking.booking_id,
+    nestedBooking.uid,
+    nestedBooking.id,
+    nestedBooking.bookingId,
+    payloadData.uid,
+    payloadData.id,
+    payloadData.bookingId,
+    payloadPayload.uid,
+    payloadPayload.id,
+    payloadPayload.bookingId,
+    payload.uid,
+    payload.id,
+    payload.bookingId,
+    payload.bookingUid,
+  ];
+
+  const INVALID_CANDIDATE_STRINGS = new Set([
+    "",
+    "null",
+    "undefined",
+    "false",
+    "true",
+    "[object object]",
+  ]);
+  const candidateIds: string[] = [];
+  for (const item of rawCandidateIds) {
+    if (item !== undefined && item !== null) {
+      const s = String(item).trim();
+      if (s && !INVALID_CANDIDATE_STRINGS.has(s.toLowerCase()) && !candidateIds.includes(s)) {
+        candidateIds.push(s);
+      }
+    }
+  }
+
+  const primaryUid = candidateIds[0] || "";
+
+  const cancellationReason =
+    booking.cancellationReason ||
+    booking.rejectionReason ||
+    nestedBooking.cancellationReason ||
+    payloadPayload.cancellationReason ||
+    payloadData.cancellationReason ||
+    payload.cancellationReason ||
+    payload.reason ||
+    payload.rejectionReason ||
+    null;
+
+  const cancelledBy =
+    booking.cancelledBy ||
+    nestedBooking.cancelledBy ||
+    payloadPayload.cancelledBy ||
+    payloadData.cancelledBy ||
+    payload.cancelledBy ||
+    null;
+
+  return {
+    primaryUid,
+    candidateIds,
+    cancellationReason: cancellationReason ? String(cancellationReason).trim() : null,
+    cancelledBy: cancelledBy ? String(cancelledBy).trim() : null,
+    triggerEvent,
+    isCancellation,
+    isReschedule,
+    isPing,
+  };
+}
+
+export type ProcessCalcomCancellationInput = {
+  rawBody?: string;
+  payload?: any;
+  headers?: Record<string, string | string[] | undefined> | Headers;
+  secret?: string;
+  bookingUid?: string;
+  organizationId?: string;
+};
+
+export type ProcessCalcomCancellationResult =
+  | {
+      success: true;
+      statusCode: 200;
+      action: "cancelled" | "already_cancelled";
+      appointmentId: string;
+      bookingUid: string;
+      cancellationReason?: string | null;
+      cancelledAt?: string;
+      message: string;
+    }
+  | {
+      success: false;
+      statusCode: 400 | 401 | 404 | 500;
+      error: string;
+      bookingUid?: string;
+    };
+
+export async function processCalcomCancellation(
+  input: ProcessCalcomCancellationInput,
+  options: BookingServiceOptions = {},
+): Promise<ProcessCalcomCancellationResult> {
+  const env = options.env ?? process.env;
+  const configuredSecret = input.secret ?? env.CALCOM_WEBHOOK_SECRET?.trim();
+  const db = options.db ?? defaultPrisma;
+
+  // 1. Verify signature if secret configured
+  if (configuredSecret && input.headers) {
+    let sigHeader: string | null = null;
+    if (typeof (input.headers as any)?.get === "function") {
+      sigHeader =
+        (input.headers as Headers).get("x-cal-signature-256") ||
+        (input.headers as Headers).get("x-cal-secret") ||
+        (input.headers as Headers).get("x-calcom-signature") ||
+        (input.headers as Headers).get("cal-signature-256");
+    } else {
+      const h = input.headers as Record<string, any>;
+      sigHeader =
+        h["x-cal-signature-256"] ||
+        h["X-Cal-Signature-256"] ||
+        h["x-cal-secret"] ||
+        h["X-Cal-Secret"] ||
+        h["x-calcom-signature"] ||
+        h["cal-signature-256"] ||
+        h["authorization"]?.replace(/^Bearer\s+/i, "");
+    }
+
+    const isValid = verifyCalcomSignature(input.rawBody || "", sigHeader, configuredSecret);
+    if (!isValid) {
+      return {
+        success: false,
+        statusCode: 401,
+        error: "Invalid webhook signature.",
+      };
+    }
+  }
+
+  // 2. Parse payload if needed
+  let payload = input.payload;
+  if (!payload && input.rawBody) {
+    try {
+      payload = JSON.parse(input.rawBody);
+    } catch {
+      return {
+        success: false,
+        statusCode: 400,
+        error: "Invalid JSON body.",
+      };
+    }
+  }
+
+  // 3. Extract identifiers
+  const extracted = extractCalcomIdentifiers(payload);
+  const candidateIds = input.bookingUid
+    ? [input.bookingUid.trim(), ...extracted.candidateIds.filter((c) => c !== input.bookingUid?.trim())]
+    : extracted.candidateIds;
+  const primaryUid = candidateIds[0] || "";
+
+  if (!primaryUid) {
+    return {
+      success: false,
+      statusCode: 400,
+      error: "Missing Cal.com booking identifier in webhook payload.",
+    };
+  }
+
+  // Reject reschedule events if accidentally invoked for cancellation
+  if (extracted.isReschedule) {
+    return {
+      success: false,
+      statusCode: 400,
+      error: `Event '${extracted.triggerEvent}' is a rescheduling event, not a cancellation event.`,
+      bookingUid: primaryUid,
+    };
+  }
+
+  // 4. Find appointment in PostgreSQL by external booking identifier
+  const targetOrgId = options.organizationId || input.organizationId;
+  const orgFilter = targetOrgId ? { organizationId: targetOrgId } : {};
+
+  let appt: any = null;
+  try {
+    appt = await db.appointment.findFirst({
+      where: {
+        ...orgFilter,
+        OR: [
+          { calcomEventId: { in: candidateIds } },
+          { id: { in: candidateIds }, provider: "calcom" },
+        ],
+      },
+      include: { contact: true },
+    });
+
+    if (!appt && db.appointment.findMany) {
+      // Fallback check in JSON metadata for calcomBookingUid or bookingUid
+      const potentialAppts = await db.appointment.findMany({
+        where: {
+          ...orgFilter,
+          provider: "calcom",
+        },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        include: { contact: true },
+      });
+      for (const p of potentialAppts) {
+        const m = (p.metadata || {}) as Record<string, any>;
+        const mUid = String(m.calcomBookingUid || m.bookingUid || m.calcomEventId || "").trim();
+        if (mUid && candidateIds.includes(mUid)) {
+          appt = p;
+          break;
+        }
+      }
+    }
+  } catch (findErr: any) {
+    console.error(`[Cal.com Cancellation Lookup Error] bookingUid=${primaryUid} error="${findErr?.message}"`);
+    return {
+      success: false,
+      statusCode: 500,
+      error: `Failed to query appointment from database: ${findErr?.message || "Unknown error"}`,
+      bookingUid: primaryUid,
+    };
+  }
+
+  if (!appt) {
+    return {
+      success: false,
+      statusCode: 404,
+      error: `No appointment found matching Cal.com booking identifier '${primaryUid}'.`,
+      bookingUid: primaryUid,
+    };
+  }
+
+  // 5. Handle duplicate deliveries idempotently (already cancelled)
+  const isAlreadyCancelled =
+    appt.status?.toLowerCase() === "cancelled" || appt.status?.toLowerCase() === "canceled";
+
+  if (isAlreadyCancelled) {
+    return {
+      success: true,
+      statusCode: 200,
+      action: "already_cancelled",
+      appointmentId: appt.id,
+      bookingUid: primaryUid,
+      cancellationReason: extracted.cancellationReason,
+      message: `Appointment '${appt.id}' is already marked as cancelled.`,
+    };
+  }
+
+  // 6. Update appointment status and cancellation metadata in PostgreSQL
+  const previousMetadata = (appt.metadata && typeof appt.metadata === "object"
+    ? appt.metadata
+    : {}) as Record<string, unknown>;
+
+  const nowIso = (options.now ?? new Date()).toISOString();
+  const updatedMetadata: Record<string, unknown> = {
+    ...previousMetadata,
+    cancelledAt: nowIso,
+    cancellationReason: extracted.cancellationReason || previousMetadata.cancellationReason || "Cancelled via Cal.com",
+    cancelledBy: extracted.cancelledBy || previousMetadata.cancelledBy || "calcom_webhook",
+    calcomStatus: "CANCELLED",
+    lastWebhookEvent: extracted.triggerEvent || "BOOKING_CANCELLED",
+  };
+
+  try {
+    await db.appointment.update({
+      where: { id: appt.id },
+      data: {
+        status: "cancelled",
+        metadata: updatedMetadata,
+      },
+    });
+
+    if (db.auditLog?.create) {
+      try {
+        await db.auditLog.create({
+          data: {
+            organizationId: appt.organizationId,
+            entity: "appointment",
+            action: "calcom_webhook_cancel",
+            details: {
+              appointmentId: appt.id,
+              calcomBookingUid: primaryUid,
+              triggerEvent: extracted.triggerEvent || "BOOKING_CANCELLED",
+              cancellationReason: extracted.cancellationReason,
+              cancelledAt: nowIso,
+            },
+          },
+        });
+      } catch {}
+    }
+
+    return {
+      success: true,
+      statusCode: 200,
+      action: "cancelled",
+      appointmentId: appt.id,
+      bookingUid: primaryUid,
+      cancellationReason: extracted.cancellationReason,
+      cancelledAt: nowIso,
+      message: `Appointment '${appt.id}' status successfully updated to cancelled.`,
+    };
+  } catch (updateErr: any) {
+    console.error(`[Cal.com Cancellation DB Update Error] bookingUid=${primaryUid} error="${updateErr?.message}"`);
+    return {
+      success: false,
+      statusCode: 500,
+      error: `Failed to update appointment cancellation in database: ${updateErr?.message || "Unknown error"}`,
+      bookingUid: primaryUid,
+    };
+  }
 }
 

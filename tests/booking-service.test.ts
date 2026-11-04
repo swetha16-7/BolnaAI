@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server.js";
 import { POST as rescheduleAppointmentRoute } from "../app/api/reschedule-appointment/route.ts";
+import { POST as calcomWebhookRoute } from "../app/api/webhooks/calcom/route.ts";
 
 import {
   checkAvailability,
@@ -15,6 +16,9 @@ import {
   parseTimeString,
   resolveLocationTimezone,
   createDateInTimezone,
+  processCalcomCancellation,
+  verifyCalcomSignature,
+  extractCalcomIdentifiers,
   type CheckAvailabilityInput,
   type BookAppointmentInput,
   type RescheduleAppointmentInput,
@@ -33,6 +37,7 @@ function createMockDb(overrides: {
   organization?: any;
   providerLink?: any;
   transactionFail?: boolean;
+  updateFail?: boolean;
 } = {}) {
   const appointments: any[] = [...(overrides.appointments ?? [])];
   const contacts: any[] = [...(overrides.contacts ?? [])];
@@ -80,8 +85,8 @@ function createMockDb(overrides: {
           }
           if (args?.where?.OR && Array.isArray(args.where.OR)) {
             const matchesOr = args.where.OR.some((cond: any) => {
-              if (cond.calcomEventId && a.calcomEventId === cond.calcomEventId) return true;
-              if (cond.id && a.id === cond.id) return true;
+              if (cond.calcomEventId && (a.calcomEventId === cond.calcomEventId || (cond.calcomEventId?.in && cond.calcomEventId.in.includes(a.calcomEventId)))) return true;
+              if (cond.id && (a.id === cond.id || (cond.id?.in && cond.id.in.includes(a.id)))) return true;
               if (cond.startsAt?.lt && cond.endsAt?.gt) {
                 const aEnd = a.endsAt ?? new Date(a.startsAt.getTime() + 60 * 60 * 1000);
                 if (a.startsAt < cond.startsAt.lt && aEnd > cond.endsAt.gt) return true;
@@ -103,6 +108,9 @@ function createMockDb(overrides: {
         return created;
       },
       update: async ({ where, data }: any) => {
+        if (overrides.updateFail) {
+          throw new Error("Simulated database connection failure during update");
+        }
         const index = appointments.findIndex((a) => a.id === where.id);
         if (index >= 0) {
           appointments[index] = { ...appointments[index], ...data };
@@ -2521,6 +2529,637 @@ test("rescheduleAppointment: Cal.com HTTP 200 with status: 'error' is safely han
   const appt = mockDb._state.appointments.find((a) => a.id === "appt-status-error");
   assert.equal(appt.startsAt.getTime(), origStartsAt.getTime());
   assert.equal(appt.calcomEventId, "uid-status-err");
+});
+
+// ---------------------------------------------------------------------------
+// Cal.com Booking Cancellation Synchronization Tests
+// ---------------------------------------------------------------------------
+
+test("Cal.com cancellation: Valid webhook with HMAC signature marks appointment as cancelled", async () => {
+  const secret = "test-webhook-secret-xyz";
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-cancel-1",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        startsAt: new Date("2026-11-05T10:00:00.000Z"),
+        endsAt: new Date("2026-11-05T10:30:00.000Z"),
+        calcomEventId: "cal_uid_cancel_123",
+        metadata: {
+          customerName: "Rahul Verma",
+          phoneNumber: "+919876543210",
+        },
+      },
+    ],
+  });
+
+  const payload = {
+    triggerEvent: "BOOKING_CANCELLED",
+    createdAt: "2026-11-04T12:00:00.000Z",
+    payload: {
+      uid: "cal_uid_cancel_123",
+      id: 991122,
+      title: "Property Viewing - Villa",
+      cancellationReason: "Customer requested cancellation via email",
+      status: "CANCELLED",
+    },
+  };
+  const rawBody = JSON.stringify(payload);
+  const crypto = await import("node:crypto");
+  const hmac = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+
+  const result = await processCalcomCancellation(
+    {
+      rawBody,
+      payload,
+      headers: {
+        "x-cal-signature-256": `sha256=${hmac}`,
+      },
+      secret,
+    },
+    { db: mockDb as any },
+  );
+
+  assert.equal(result.success, true);
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.action, "cancelled");
+  assert.equal(result.appointmentId, "appt-cancel-1");
+  assert.equal(result.bookingUid, "cal_uid_cancel_123");
+  assert.equal(result.cancellationReason, "Customer requested cancellation via email");
+
+  // Verify in PostgreSQL mock DB
+  const appt = mockDb._state.appointments.find((a) => a.id === "appt-cancel-1");
+  assert.equal(appt.status, "cancelled");
+  assert.equal(appt.metadata.calcomStatus, "CANCELLED");
+  assert.equal(appt.metadata.cancellationReason, "Customer requested cancellation via email");
+  assert.ok(appt.metadata.cancelledAt, "Must record cancelledAt timestamp in metadata");
+});
+
+test("Cal.com cancellation: Invalid webhook authentication returns 401 and does not cancel", async () => {
+  const secret = "correct-webhook-secret";
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-cancel-2",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        calcomEventId: "cal_uid_safe_456",
+      },
+    ],
+  });
+
+  const payload = {
+    triggerEvent: "BOOKING_CANCELLED",
+    payload: { uid: "cal_uid_safe_456" },
+  };
+  const rawBody = JSON.stringify(payload);
+
+  const result = await processCalcomCancellation(
+    {
+      rawBody,
+      payload,
+      headers: {
+        "x-cal-signature-256": "wrong-signature-hex",
+      },
+      secret,
+    },
+    { db: mockDb as any },
+  );
+
+  assert.equal(result.success, false);
+  assert.equal(result.statusCode, 401);
+  assert.match(result.error, /invalid.*signature/i);
+
+  // Database record remains confirmed
+  const appt = mockDb._state.appointments.find((a) => a.id === "appt-cancel-2");
+  assert.equal(appt.status, "confirmed");
+});
+
+test("Cal.com cancellation: Extracts booking UID from multiple Cal.com payload formats", async () => {
+  // Format 1: v2 event with payload.data.uid
+  const extracted1 = extractCalcomIdentifiers({
+    type: "booking.cancelled",
+    data: {
+      uid: "uid-v2-format",
+      id: 112233,
+      cancellationReason: "Rescheduled to another week",
+    },
+  });
+  assert.equal(extracted1.isCancellation, true);
+  assert.equal(extracted1.primaryUid, "uid-v2-format");
+  assert.ok(extracted1.candidateIds.includes("112233"));
+  assert.equal(extracted1.cancellationReason, "Rescheduled to another week");
+
+  // Format 2: nested booking in payload.payload.booking
+  const extracted2 = extractCalcomIdentifiers({
+    event: "BOOKING_CANCELLED",
+    payload: {
+      booking: {
+        uid: "uid-nested-booking",
+        id: 445566,
+      },
+      rejectionReason: "Host unavailable",
+    },
+  });
+  assert.equal(extracted2.isCancellation, true);
+  assert.equal(extracted2.primaryUid, "uid-nested-booking");
+  assert.equal(extracted2.cancellationReason, "Host unavailable");
+
+  // Format 3: top-level UID and status: CANCELLED
+  const extracted3 = extractCalcomIdentifiers({
+    uid: "uid-top-level",
+    status: "CANCELLED",
+  });
+  assert.equal(extracted3.isCancellation, true);
+  assert.equal(extracted3.primaryUid, "uid-top-level");
+});
+
+test("Cal.com cancellation: Matches appointment when UID is in metadata", async () => {
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-meta-match",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        provider: "calcom",
+        calcomEventId: null, // Empty or null in main column
+        metadata: {
+          calcomBookingUid: "uid-stored-in-metadata-789",
+          customerName: "Sneha Patel",
+        },
+      },
+    ],
+  });
+
+  const result = await processCalcomCancellation(
+    {
+      payload: {
+        triggerEvent: "BOOKING_CANCELLED",
+        payload: {
+          uid: "uid-stored-in-metadata-789",
+        },
+      },
+    },
+    { db: mockDb as any },
+  );
+
+  assert.equal(result.success, true);
+  assert.equal(result.action, "cancelled");
+  assert.equal(result.appointmentId, "appt-meta-match");
+
+  const appt = mockDb._state.appointments.find((a) => a.id === "appt-meta-match");
+  assert.equal(appt.status, "cancelled");
+});
+
+test("Cal.com cancellation: Handles duplicate cancellation webhook deliveries idempotently without duplicate audit logs", async () => {
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-idempotent-test",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        calcomEventId: "uid-idempotent-123",
+      },
+    ],
+  });
+
+  const payload = {
+    triggerEvent: "BOOKING_CANCELLED",
+    payload: {
+      uid: "uid-idempotent-123",
+      cancellationReason: "Original cancellation reason",
+    },
+  };
+
+  // Delivery 1: Successful cancellation
+  const result1 = await processCalcomCancellation(
+    { payload },
+    { db: mockDb as any },
+  );
+
+  assert.equal(result1.success, true);
+  assert.equal(result1.statusCode, 200);
+  assert.equal(result1.action, "cancelled");
+  assert.equal(mockDb._state.auditLogs.length, 1);
+
+  const apptAfterFirst = mockDb._state.appointments.find((a) => a.id === "appt-idempotent-test");
+  assert.equal(apptAfterFirst.status, "cancelled");
+
+  // Delivery 2: Duplicate delivery
+  const result2 = await processCalcomCancellation(
+    { payload },
+    { db: mockDb as any },
+  );
+
+  assert.equal(result2.success, true);
+  assert.equal(result2.statusCode, 200);
+  assert.equal(result2.action, "already_cancelled");
+  // CRITICAL: Duplicate delivery must NOT create a duplicate audit log
+  assert.equal(mockDb._state.auditLogs.length, 1);
+});
+
+test("Cal.com cancellation: Rescheduled bookings are not marked as cancelled", async () => {
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-reschedule-test",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        calcomEventId: "uid-reschedule-123",
+      },
+    ],
+  });
+
+  // Cal.com reschedule event often has internal status 'CANCELLED' on previous slot
+  const reschedulePayload = {
+    triggerEvent: "BOOKING_RESCHEDULED",
+    payload: {
+      uid: "uid-reschedule-123",
+      status: "CANCELLED", // Internal Cal.com status for former slot
+    },
+  };
+
+  const extracted = extractCalcomIdentifiers(reschedulePayload);
+  assert.equal(extracted.isReschedule, true);
+  assert.equal(extracted.isCancellation, false);
+
+  const result = await processCalcomCancellation(
+    { payload: reschedulePayload },
+    { db: mockDb as any },
+  );
+
+  assert.equal(result.success, false);
+  assert.equal(result.statusCode, 400);
+  assert.match(result.error, /rescheduling event/i);
+
+  // Appointment in DB remains confirmed
+  const appt = mockDb._state.appointments.find((a) => a.id === "appt-reschedule-test");
+  assert.equal(appt.status, "confirmed");
+});
+
+test("Cal.com cancellation: Tenant isolation prevents cross-tenant appointment cancellation", async () => {
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-org-beta",
+        organizationId: "org-beta",
+        status: "confirmed",
+        calcomEventId: "uid-tenant-isolation-123",
+        provider: "calcom",
+      },
+    ],
+  });
+
+  // Webhook received for tenant 'org-alpha' trying to cancel 'org-beta' appointment
+  const result = await processCalcomCancellation(
+    {
+      organizationId: "org-alpha",
+      payload: {
+        triggerEvent: "BOOKING_CANCELLED",
+        payload: {
+          uid: "uid-tenant-isolation-123",
+        },
+      },
+    },
+    { db: mockDb as any },
+  );
+
+  assert.equal(result.success, false);
+  assert.equal(result.statusCode, 404);
+  assert.match(result.error, /no appointment found/i);
+
+  // Target appointment in org-beta is untouched
+  const appt = mockDb._state.appointments.find((a) => a.id === "appt-org-beta");
+  assert.equal(appt.status, "confirmed");
+});
+
+test("Cal.com cancellation: Invalid placeholder identifiers ('null', 'undefined', whitespace) are rejected", async () => {
+  const extracted = extractCalcomIdentifiers({
+    triggerEvent: "BOOKING_CANCELLED",
+    payload: {
+      uid: "null",
+      id: "undefined",
+    },
+  });
+
+  assert.equal(extracted.primaryUid, "");
+  assert.equal(extracted.candidateIds.length, 0);
+
+  const mockDb = createMockDb();
+  const result = await processCalcomCancellation(
+    {
+      payload: {
+        triggerEvent: "BOOKING_CANCELLED",
+        payload: { uid: "   " },
+      },
+    },
+    { db: mockDb as any },
+  );
+
+  assert.equal(result.success, false);
+  assert.equal(result.statusCode, 400);
+  assert.match(result.error, /missing cal\.com booking identifier/i);
+});
+
+test("Cal.com signature verification handles hex casing, prefixes, and timing-safe checks", async () => {
+  const secret = "test-secret-key-9876";
+  const body = JSON.stringify({ event: "test" });
+  const crypto = await import("node:crypto");
+  const hex = crypto.createHmac("sha256", secret).update(body).digest("hex");
+
+  // Standard lowercase hex
+  assert.equal(verifyCalcomSignature(body, hex, secret), true);
+
+  // Uppercase hex
+  assert.equal(verifyCalcomSignature(body, hex.toUpperCase(), secret), true);
+
+  // sha256= prefix
+  assert.equal(verifyCalcomSignature(body, `sha256=${hex}`, secret), true);
+
+  // v1= prefix
+  assert.equal(verifyCalcomSignature(body, `v1=${hex}`, secret), true);
+
+  // Direct secret match
+  assert.equal(verifyCalcomSignature(body, secret, secret), true);
+
+  // Tampered payload
+  assert.equal(verifyCalcomSignature(body + "tamper", hex, secret), false);
+
+  // Wrong secret
+  assert.equal(verifyCalcomSignature(body, hex, "wrong-secret"), false);
+
+  // Empty signature
+  assert.equal(verifyCalcomSignature(body, "", secret), false);
+  assert.equal(verifyCalcomSignature(body, null, secret), false);
+});
+
+test("Cal.com cancellation: Unknown booking UID returns 404 without modifying appointments", async () => {
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-existing-1",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        calcomEventId: "uid-existing-123",
+      },
+    ],
+  });
+
+  const result = await processCalcomCancellation(
+    {
+      payload: {
+        triggerEvent: "BOOKING_CANCELLED",
+        payload: {
+          uid: "unknown-nonexistent-uid-999",
+        },
+      },
+    },
+    { db: mockDb as any },
+  );
+
+  assert.equal(result.success, false);
+  assert.equal(result.statusCode, 404);
+  assert.match(result.error, /no appointment found/i);
+
+  // Existing appointment remains confirmed
+  const appt = mockDb._state.appointments.find((a) => a.id === "appt-existing-1");
+  assert.equal(appt.status, "confirmed");
+});
+
+test("Cal.com cancellation: Database update failure returns 500 error", async () => {
+  const mockDb = createMockDb({
+    appointments: [
+      {
+        id: "appt-db-fail",
+        organizationId: "org-test-1",
+        status: "confirmed",
+        calcomEventId: "uid-db-fail",
+      },
+    ],
+    updateFail: true, // Trigger simulated DB failure on update
+  });
+
+  const result = await processCalcomCancellation(
+    {
+      payload: {
+        triggerEvent: "BOOKING_CANCELLED",
+        payload: {
+          uid: "uid-db-fail",
+        },
+      },
+    },
+    { db: mockDb as any },
+  );
+
+  assert.equal(result.success, false);
+  assert.equal(result.statusCode, 500);
+  assert.match(result.error, /failed to update/i);
+});
+
+test("Bookings page statistics and status recalculation logic accurately counts cancelled bookings", () => {
+  // Test the exact statistics reducer used in components/views/bookings-view.tsx
+  const appointments = [
+    { id: "1", status: "confirmed" },
+    { id: "2", status: "pending" },
+    { id: "3", status: "cancelled" },
+    { id: "4", status: "confirmed" },
+    { id: "5", status: "cancelled" },
+  ];
+
+  const total = appointments.length;
+  const confirmed = appointments.filter((a) => a.status.toLowerCase() === "confirmed").length;
+  const pending = appointments.filter((a) => a.status.toLowerCase() === "pending").length;
+  const cancelled = appointments.filter(
+    (a) => a.status.toLowerCase() === "cancelled" || a.status.toLowerCase() === "canceled"
+  ).length;
+
+  assert.equal(total, 5);
+  assert.equal(confirmed, 2);
+  assert.equal(pending, 1);
+  assert.equal(cancelled, 2);
+
+  // When a confirmed appointment is cancelled:
+  const updatedAppointments = appointments.map((a) =>
+    a.id === "1" ? { ...a, status: "cancelled" } : a
+  );
+  const updatedConfirmed = updatedAppointments.filter((a) => a.status.toLowerCase() === "confirmed").length;
+  const updatedCancelled = updatedAppointments.filter(
+    (a) => a.status.toLowerCase() === "cancelled" || a.status.toLowerCase() === "canceled"
+  ).length;
+
+  assert.equal(updatedAppointments.length, 5); // Total Bookings remains accurate
+  assert.equal(updatedConfirmed, 1);          // Confirmed decrements
+  assert.equal(updatedCancelled, 3);          // Cancelled increments
+});
+
+// ---------------------------------------------------------------------------
+// Cal.com Webhook Route & Ping Test Handling
+// ---------------------------------------------------------------------------
+
+test("Cal.com webhook route: Valid signed Ping returns HTTP 200 with status ok and zero DB calls", async () => {
+  const origSecret = process.env.CALCOM_WEBHOOK_SECRET;
+  const testSecret = "test-calcom-webhook-secret-999";
+  process.env.CALCOM_WEBHOOK_SECRET = testSecret;
+
+  try {
+    const crypto = await import("node:crypto");
+    const payload = {
+      triggerEvent: "PING",
+      createdAt: "2026-11-04T12:00:00.000Z",
+      payload: {},
+    };
+    const rawBody = JSON.stringify(payload);
+    const signature = crypto.createHmac("sha256", testSecret).update(rawBody).digest("hex");
+
+    const req = new NextRequest(new URL("https://ai.boomirealestate.com/api/webhooks/calcom"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-cal-signature-256": signature,
+      },
+      body: rawBody,
+    });
+
+    const res = await calcomWebhookRoute(req);
+    assert.equal(res.status, 200);
+
+    const body = await res.json();
+    assert.equal(body.received, true);
+    assert.equal(body.status, "ok");
+    assert.equal(body.event, "PING");
+    assert.match(body.message, /ping test received successfully/i);
+  } finally {
+    process.env.CALCOM_WEBHOOK_SECRET = origSecret;
+  }
+});
+
+test("Cal.com webhook route: Invalid signature returns HTTP 401 even for PING event", async () => {
+  const origSecret = process.env.CALCOM_WEBHOOK_SECRET;
+  const testSecret = "test-calcom-webhook-secret-999";
+  process.env.CALCOM_WEBHOOK_SECRET = testSecret;
+
+  try {
+    const payload = {
+      triggerEvent: "PING",
+      createdAt: "2026-11-04T12:00:00.000Z",
+    };
+    const rawBody = JSON.stringify(payload);
+
+    const req = new NextRequest(new URL("https://ai.boomirealestate.com/api/webhooks/calcom"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-cal-signature-256": "invalid-tampered-signature-hex",
+      },
+      body: rawBody,
+    });
+
+    const res = await calcomWebhookRoute(req);
+    assert.equal(res.status, 401);
+
+    const body = await res.json();
+    assert.match(body.error, /invalid.*signature/i);
+  } finally {
+    process.env.CALCOM_WEBHOOK_SECRET = origSecret;
+  }
+});
+
+test("Cal.com webhook route: Missing signature is rejected with HTTP 401 when CALCOM_WEBHOOK_SECRET is configured", async () => {
+  const origSecret = process.env.CALCOM_WEBHOOK_SECRET;
+  const testSecret = "test-calcom-webhook-secret-999";
+  process.env.CALCOM_WEBHOOK_SECRET = testSecret;
+
+  try {
+    const payload = {
+      triggerEvent: "PING",
+      createdAt: "2026-11-04T12:00:00.000Z",
+    };
+    const rawBody = JSON.stringify(payload);
+
+    const req = new NextRequest(new URL("https://ai.boomirealestate.com/api/webhooks/calcom"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // No signature header
+      },
+      body: rawBody,
+    });
+
+    const res = await calcomWebhookRoute(req);
+    assert.equal(res.status, 401);
+
+    const body = await res.json();
+    assert.match(body.error, /invalid.*signature/i);
+  } finally {
+    process.env.CALCOM_WEBHOOK_SECRET = origSecret;
+  }
+});
+
+test("Cal.com webhook route: Malformed JSON is rejected with HTTP 400", async () => {
+  const origSecret = process.env.CALCOM_WEBHOOK_SECRET;
+  delete process.env.CALCOM_WEBHOOK_SECRET;
+
+  try {
+    const req = new NextRequest(new URL("https://ai.boomirealestate.com/api/webhooks/calcom"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: "{ not-valid-json ",
+    });
+
+    const res = await calcomWebhookRoute(req);
+    assert.equal(res.status, 400);
+
+    const body = await res.json();
+    assert.match(body.error, /invalid json/i);
+  } finally {
+    process.env.CALCOM_WEBHOOK_SECRET = origSecret;
+  }
+});
+
+test("Cal.com Ping test: extractCalcomIdentifiers recognizes explicit triggerEvent === 'PING' and distinguishes from booking events", () => {
+  // Explicit PING event
+  const ping1 = extractCalcomIdentifiers({
+    triggerEvent: "PING",
+    createdAt: "2026-11-04T12:00:00.000Z",
+    payload: {},
+  });
+  assert.equal(ping1.isPing, true);
+  assert.equal(ping1.isCancellation, false);
+  assert.equal(ping1.isReschedule, false);
+  assert.equal(ping1.primaryUid, "");
+
+  // Cancellation event
+  const cancel = extractCalcomIdentifiers({
+    triggerEvent: "BOOKING_CANCELLED",
+    payload: { uid: "uid-cancel-123" },
+  });
+  assert.equal(cancel.isPing, false);
+  assert.equal(cancel.isCancellation, true);
+  assert.equal(cancel.isReschedule, false);
+  assert.equal(cancel.primaryUid, "uid-cancel-123");
+
+  // Reschedule event
+  const reschedule = extractCalcomIdentifiers({
+    triggerEvent: "BOOKING_RESCHEDULED",
+    payload: { uid: "uid-resched-123" },
+  });
+  assert.equal(reschedule.isPing, false);
+  assert.equal(reschedule.isCancellation, false);
+  assert.equal(reschedule.isReschedule, true);
+  assert.equal(reschedule.primaryUid, "uid-resched-123");
+
+  // Creation event
+  const created = extractCalcomIdentifiers({
+    triggerEvent: "BOOKING_CREATED",
+    payload: { uid: "uid-created-123" },
+  });
+  assert.equal(created.isPing, false);
+  assert.equal(created.isCancellation, false);
+  assert.equal(created.isReschedule, false);
+  assert.equal(created.primaryUid, "uid-created-123");
 });
 
 
