@@ -290,12 +290,16 @@ export const BookingsView: React.FC = () => {
       {/* 3. Search and Filter Toolbar Container */}
       <div className="bg-white rounded-[16px] border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[14px_18px] min-h-[76px] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 sm:gap-4">
         {/* Search Input (approx 42-45% of width) */}
-        <div className="relative flex-[42] min-w-[280px]">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-[#94A3B8] pointer-events-none" />
+        <div className="relative flex-[42] min-w-[280px] flex items-center">
+          <Search
+            className="absolute left-4 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-[#94A3B8] pointer-events-none"
+            style={{ left: "16px", top: "50%", transform: "translateY(-50%)", width: "18px", height: "18px", pointerEvents: "none" }}
+          />
           <input
             type="text"
             aria-label="Search bookings"
-            className="h-[48px] w-full rounded-[12px] pl-11 pr-4 text-[14px] bg-white text-[#111827] border border-[#E2E8F0] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#6D28D9] focus:ring-2 focus:ring-[#6D28D9]/15 transition-all"
+            className="h-[48px] w-full rounded-[12px] pl-11 pr-4 text-[14px] sm:text-[15px] bg-white text-[#111827] border border-[#E2E8F0] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#6D28D9] focus:ring-2 focus:ring-[#6D28D9]/15 transition-all"
+            style={{ paddingLeft: "44px", paddingRight: "14px" }}
             placeholder="Search by customer, phone, email, property, reference..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
