@@ -372,3 +372,70 @@ test("10. Notification Preferences section is completely removed from ProfileVie
     "prefSlack state must not exist in profile-view.tsx",
   );
 });
+
+test("11. Customers section is completely removed from CRM navigation and interface", () => {
+  const crmFile = fs.readFileSync(
+    path.join(process.cwd(), "components", "views", "crm-view.tsx"),
+    "utf-8",
+  );
+
+  assert.equal(
+    crmFile.includes('{ key: "customers", label: "Customers" }'),
+    false,
+    "Customers tab must not exist in crm-view.tsx tabs array",
+  );
+  assert.equal(
+    crmFile.includes('activeTab === "customers"'),
+    false,
+    "activeTab === 'customers' checks must not exist in crm-view.tsx",
+  );
+
+  const pageFile = fs.readFileSync(
+    path.join(process.cwd(), "app", "page.tsx"),
+    "utf-8",
+  );
+
+  assert.equal(
+    pageFile.includes('href="#/customers"'),
+    false,
+    "Customers sidebar navigation link must not exist in app/page.tsx",
+  );
+  assert.equal(
+    pageFile.includes('"customers":'),
+    false,
+    "Customers must not be defined in routeConfig",
+  );
+  assert.ok(
+    pageFile.includes('routeName === "customers"') && pageFile.includes('window.location.hash = "#/dashboard"'),
+    "Navigating to #/customers must redirect to dashboard",
+  );
+});
+
+test("12. Contacts page and CRM Leads, Bookings, and Follow-Ups functionality are fully preserved", () => {
+  const pageFile = fs.readFileSync(
+    path.join(process.cwd(), "app", "page.tsx"),
+    "utf-8",
+  );
+
+  assert.ok(
+    pageFile.includes('"contacts": { breadcrumb: "Contacts", component: ContactsView }'),
+    "Contacts page must be preserved in routeConfig",
+  );
+  assert.ok(
+    pageFile.includes('href="#/contacts"'),
+    "Contacts link must remain in sidebar",
+  );
+  assert.ok(
+    pageFile.includes('href="#/crm"'),
+    "CRM link must remain in sidebar",
+  );
+
+  const crmFile = fs.readFileSync(
+    path.join(process.cwd(), "components", "views", "crm-view.tsx"),
+    "utf-8",
+  );
+
+  assert.ok(crmFile.includes('{ key: "leads", label: "Leads" }'), "Leads tab must exist in CRM");
+  assert.ok(crmFile.includes('{ key: "bookings", label: "Bookings" }'), "Bookings tab must exist in CRM");
+  assert.ok(crmFile.includes('{ key: "followups", label: "Follow-Ups" }'), "Follow-Ups tab must exist in CRM");
+});

@@ -87,6 +87,11 @@ export default function Home() {
         });
       }
 
+      if (routeName === "customers") {
+        window.location.hash = "#/dashboard";
+        return;
+      }
+
       if (routeConfig[routeName]) {
         setActiveRoute(routeName);
         setQueryParams(params);

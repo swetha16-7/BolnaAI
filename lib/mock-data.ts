@@ -221,36 +221,6 @@ export const crmKpiStats = [
   },
 ];
 
-export const customers = [
-  {
-    id: "C-001",
-    name: "Acme Corp",
-    email: "contact@acme.com",
-    phone: "+1 555-123-4567",
-    status: "Active",
-    value: "$50,000",
-    lastContact: "2026-06-23",
-  },
-  {
-    id: "C-002",
-    name: "Tech Innovations Ltd",
-    email: "info@techinnovations.com",
-    phone: "+1 555-234-5678",
-    status: "Active",
-    value: "$35,000",
-    lastContact: "2026-06-22",
-  },
-  {
-    id: "C-003",
-    name: "Global Services Inc",
-    email: "sales@globalservices.com",
-    phone: "+1 555-345-6789",
-    status: "Inactive",
-    value: "$28,000",
-    lastContact: "2026-06-15",
-  },
-];
-
 export const teamMembers = [
   { id: "U-001", name: "Admin User", email: "admin@voicagent.ai", role: "Super Admin", status: "Active", lastLogin: "2026-06-23" },
   { id: "U-002", name: "Sarah Chen", email: "sarah@voicagent.ai", role: "Manager", status: "Active", lastLogin: "2026-06-22" },

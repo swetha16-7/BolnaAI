@@ -21,7 +21,6 @@ const tabs = [
   { key: "leads", label: "Leads" },
   { key: "bookings", label: "Bookings" },
   { key: "followups", label: "Follow-Ups" },
-  { key: "customers", label: "Customers" },
 ] as const;
 
 type CrmTab = (typeof tabs)[number]["key"];
@@ -104,13 +103,10 @@ export const CrmView: React.FC = () => {
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      void loadContacts(
-        search,
-        activeTab === "customers" ? "converted" : statusFilter,
-      );
+      void loadContacts(search, statusFilter);
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [search, statusFilter, activeTab, loadContacts]);
+  }, [search, statusFilter, loadContacts]);
 
   useEffect(() => {
     if (activeTab === "bookings") {
@@ -230,9 +226,7 @@ export const CrmView: React.FC = () => {
     }
   };
 
-  const shownContacts = activeTab === "customers"
-    ? contacts.filter((contact) => contact.status === "converted")
-    : contacts;
+  const shownContacts = contacts;
 
   return (
     <div>
@@ -261,11 +255,11 @@ export const CrmView: React.FC = () => {
         ))}
       </div>
 
-      {(activeTab === "leads" || activeTab === "customers") && (
+      {activeTab === "leads" && (
         <Card className="border-border/60">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6 py-4">
             <h3 className="text-lg font-semibold">
-              {activeTab === "customers" ? "Converted Contacts" : "Organization Contacts"}
+              Organization Contacts
             </h3>
             <div className="flex flex-wrap items-center gap-2">
               <label className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm">
@@ -321,11 +315,9 @@ export const CrmView: React.FC = () => {
                 ) : shownContacts.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                      {activeTab === "customers"
-                        ? "No contacts are marked as converted."
-                        : contacts.length === 0
-                          ? "No contacts have been added to this organization."
-                          : "No contacts match your search."}
+                      {contacts.length === 0
+                        ? "No contacts have been added to this organization."
+                        : "No contacts match your search."}
                     </TableCell>
                   </TableRow>
                 ) : shownContacts.map((contact) => (
