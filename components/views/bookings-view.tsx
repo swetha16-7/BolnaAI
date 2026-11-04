@@ -6,18 +6,17 @@ import type { ApiAppointment } from "@/lib/api-client";
 import {
   CalendarCheck,
   Calendar,
-  CheckCircle2,
+  Check,
   Clock,
-  XCircle,
+  X,
   Search,
+  Filter,
   RefreshCw,
-  RotateCcw,
   Phone,
   Mail,
   MapPin,
+  ChevronDown,
   User,
-  X,
-  Eye,
 } from "lucide-react";
 
 function formatBookingDate(dateStr: string | null | undefined): string {
@@ -56,55 +55,55 @@ function getInitials(name: string): string {
   const clean = name.trim();
   if (!clean || clean === "—" || clean === "Customer") return "C";
   const parts = clean.split(/\s+/);
-  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-  return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase();
+  if (parts.length === 1) return parts[0].substring(0, 1);
+  return (parts[0][0] || "C");
 }
 
 function getAvatarPastel(name: string): { bg: string; text: string } {
-  const pastels = [
-    { bg: "bg-purple-100", text: "text-purple-700" },
-    { bg: "bg-indigo-100", text: "text-indigo-700" },
-    { bg: "bg-blue-100", text: "text-blue-700" },
-    { bg: "bg-emerald-100", text: "text-emerald-700" },
-    { bg: "bg-amber-100", text: "text-amber-700" },
-    { bg: "bg-rose-100", text: "text-rose-700" },
-    { bg: "bg-teal-100", text: "text-teal-700" },
+  const char = (name.trim()[0] || "C").toUpperCase();
+  if (char === "S") return { bg: "bg-[#E0F2FE]", text: "text-[#0284C7]" };
+  if (char === "P") return { bg: "bg-[#EDE8FF]", text: "text-[#6D28D9]" };
+  if (char === "M") return { bg: "bg-[#FFE4E6]", text: "text-[#E11D48]" };
+  if (char === "A" || char === "B") return { bg: "bg-[#DCFCE7]", text: "text-[#16A34A]" };
+  if (char === "R" || char === "K") return { bg: "bg-[#FEF3C7]", text: "text-[#D97706]" };
+  const palette = [
+    { bg: "bg-[#E0F2FE]", text: "text-[#0284C7]" },
+    { bg: "bg-[#EDE8FF]", text: "text-[#6D28D9]" },
+    { bg: "bg-[#FFE4E6]", text: "text-[#E11D48]" },
+    { bg: "bg-[#DCFCE7]", text: "text-[#16A34A]" },
+    { bg: "bg-[#FEF3C7]", text: "text-[#D97706]" },
   ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return pastels[Math.abs(hash) % pastels.length];
+  return palette[name.charCodeAt(0) % palette.length];
 }
 
 function BookingStatusPill({ status }: { status: string }) {
   const s = status.toLowerCase();
   if (s === "confirmed") {
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-2xs">
-        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold bg-[#DCFCE7] text-[#166534] border border-[#86EFAC]/40 whitespace-nowrap shadow-2xs">
+        <Check className="h-3.5 w-3.5 text-[#166534] stroke-[2.5]" />
         Confirmed
       </span>
     );
   }
   if (s === "pending") {
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/80 shadow-2xs">
-        <Clock className="h-3.5 w-3.5 text-amber-600" />
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]/60 whitespace-nowrap shadow-2xs">
+        <Clock className="h-3.5 w-3.5 text-[#92400E] stroke-[2.5]" />
         Pending
       </span>
     );
   }
   if (s === "cancelled" || s === "canceled") {
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 shadow-2xs">
-        <XCircle className="h-3.5 w-3.5 text-rose-600" />
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold bg-[#FEE2E2] text-[#991B1B] border border-[#FECACA]/60 whitespace-nowrap shadow-2xs">
+        <X className="h-3.5 w-3.5 text-[#991B1B] stroke-[2.5]" />
         Cancelled
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200/80 shadow-2xs capitalize">
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/80 whitespace-nowrap shadow-2xs capitalize">
       <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
       {status}
     </span>
@@ -139,7 +138,7 @@ export const BookingsView: React.FC = () => {
     return { total, confirmed, pending, cancelled };
   }, [appointments]);
 
-  // Derived filtered bookings list
+  // Filtered bookings list matching search, status filter, and date filter
   const filteredBookings = useMemo(() => {
     return appointments.filter((appointment) => {
       const meta = (appointment.metadata as Record<string, unknown> | null) ?? {};
@@ -208,22 +207,22 @@ export const BookingsView: React.FC = () => {
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto min-h-screen bg-[#F8FAFC]">
-      {/* 1. Page Header — match reference */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-1">
+    <div className="space-y-5 sm:space-y-6 w-full pb-8">
+      {/* 1. Header — matches reference design */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="h-10 w-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shadow-2xs">
-              <CalendarCheck className="h-6 w-6 text-purple-600" />
+          <div className="flex items-center gap-3.5 flex-wrap">
+            <div className="h-11 w-11 rounded-[14px] bg-[#F1EDFF] border border-[#DDD6FE]/70 flex items-center justify-center text-[#6D28D9] shadow-2xs shrink-0">
+              <CalendarCheck className="h-6 w-6 text-[#6D28D9]" />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            <h1 className="text-[30px] sm:text-[32px] font-bold tracking-tight text-[#111827] leading-none">
               Bookings
             </h1>
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200/80 shadow-2xs">
-              {appointments.length} {appointments.length === 1 ? "booking" : "bookings"}
+            <span className="inline-flex items-center px-3.5 py-1 rounded-full text-[13px] font-semibold bg-[#EDE8FF] text-[#6D28D9] border border-[#DDD6FE]/60 shadow-2xs">
+              {appointments.length} {appointments.length === 1 ? "Booking" : "Bookings"}
             </span>
           </div>
-          <p className="text-sm text-slate-500 max-w-2xl pl-0.5">
+          <p className="text-[14px] text-[#64748B] font-normal pl-0.5 pt-0.5">
             Manage property viewings and consultation appointments.
           </p>
         </div>
@@ -233,143 +232,160 @@ export const BookingsView: React.FC = () => {
             type="button"
             onClick={() => void loadAppointments()}
             disabled={appointmentsLoading}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active:bg-slate-100 shadow-2xs transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500/20 disabled:opacity-60"
+            className="inline-flex items-center gap-2 px-4 py-2.5 h-[46px] rounded-xl text-[14px] font-semibold bg-white border border-[#E2E8F0] text-[#111827] hover:bg-slate-50 active:bg-slate-100 shadow-2xs transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#6D28D9]/20 disabled:opacity-60"
           >
-            <RefreshCw className={`h-4 w-4 text-purple-600 ${appointmentsLoading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 text-[#6D28D9] ${appointmentsLoading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Booking Statistics Cards (4 cards) */}
+      {/* 2. Four Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Card 1: Total Bookings */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs flex items-center justify-between transition-all hover:border-purple-200">
+        <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] min-h-[105px] flex items-center justify-between transition-all hover:border-[#6D28D9]/40">
           <div className="space-y-1">
-            <p className="text-sm font-medium text-slate-500">Total Bookings</p>
-            <p className="text-3xl font-bold tracking-tight text-slate-900">{stats.total}</p>
+            <p className="text-[13px] sm:text-[14px] font-semibold text-[#111827]">Total Bookings</p>
+            <p className="text-[28px] sm:text-[32px] font-bold text-[#111827] tracking-tight leading-none mt-2">
+              {stats.total}
+            </p>
           </div>
-          <div className="h-12 w-12 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shadow-2xs">
-            <Calendar className="h-6 w-6 text-purple-600" />
+          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#F1EDFF] border border-[#DDD6FE]/60 flex items-center justify-center text-[#6D28D9] shadow-2xs shrink-0">
+            <Calendar className="h-5 w-5 text-[#6D28D9]" />
           </div>
         </div>
 
         {/* Card 2: Confirmed */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs flex items-center justify-between transition-all hover:border-emerald-200">
+        <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] min-h-[105px] flex items-center justify-between transition-all hover:border-[#10B981]/40">
           <div className="space-y-1">
-            <p className="text-sm font-medium text-slate-500">Confirmed</p>
-            <p className="text-3xl font-bold tracking-tight text-slate-900">{stats.confirmed}</p>
+            <p className="text-[13px] sm:text-[14px] font-semibold text-[#111827]">Confirmed</p>
+            <p className="text-[28px] sm:text-[32px] font-bold text-[#111827] tracking-tight leading-none mt-2">
+              {stats.confirmed}
+            </p>
           </div>
-          <div className="h-12 w-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shadow-2xs">
-            <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#DCFCE7] border border-[#86EFAC]/40 flex items-center justify-center text-[#16A34A] shadow-2xs shrink-0">
+            <Check className="h-5 w-5 text-[#16A34A] stroke-[2.5]" />
           </div>
         </div>
 
         {/* Card 3: Pending */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs flex items-center justify-between transition-all hover:border-amber-200">
+        <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] min-h-[105px] flex items-center justify-between transition-all hover:border-[#F59E0B]/40">
           <div className="space-y-1">
-            <p className="text-sm font-medium text-slate-500">Pending</p>
-            <p className="text-3xl font-bold tracking-tight text-slate-900">{stats.pending}</p>
+            <p className="text-[13px] sm:text-[14px] font-semibold text-[#111827]">Pending</p>
+            <p className="text-[28px] sm:text-[32px] font-bold text-[#111827] tracking-tight leading-none mt-2">
+              {stats.pending}
+            </p>
           </div>
-          <div className="h-12 w-12 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shadow-2xs">
-            <Clock className="h-6 w-6 text-amber-600" />
+          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#FEF3C7] border border-[#FDE68A]/60 flex items-center justify-center text-[#D97706] shadow-2xs shrink-0">
+            <Clock className="h-5 w-5 text-[#D97706] stroke-[2.2]" />
           </div>
         </div>
 
         {/* Card 4: Cancelled */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs flex items-center justify-between transition-all hover:border-rose-200">
+        <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] min-h-[105px] flex items-center justify-between transition-all hover:border-[#EF4444]/40">
           <div className="space-y-1">
-            <p className="text-sm font-medium text-slate-500">Cancelled</p>
-            <p className="text-3xl font-bold tracking-tight text-slate-900">{stats.cancelled}</p>
+            <p className="text-[13px] sm:text-[14px] font-semibold text-[#111827]">Cancelled</p>
+            <p className="text-[28px] sm:text-[32px] font-bold text-[#111827] tracking-tight leading-none mt-2">
+              {stats.cancelled}
+            </p>
           </div>
-          <div className="h-12 w-12 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shadow-2xs">
-            <XCircle className="h-6 w-6 text-rose-600" />
+          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#FEE2E2] border border-[#FECACA]/60 flex items-center justify-center text-[#DC2626] shadow-2xs shrink-0">
+            <X className="h-5 w-5 text-[#DC2626] stroke-[2.5]" />
           </div>
         </div>
       </div>
 
       {/* 3. Search and Filter Toolbar Container */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
-          <div className="flex flex-1 flex-wrap items-center gap-3">
-            {/* Search Input */}
-            <div className="relative flex-1 min-w-[280px]">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                aria-label="Search bookings"
-                className="h-12 w-full rounded-xl pl-11 pr-4 text-sm bg-white text-slate-900 border border-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all"
-                placeholder="Search by customer, phone, email, property, reference..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-
-            {/* Booking Status Dropdown */}
-            <select
-              aria-label="Filter by booking status"
-              className="h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 font-medium focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all cursor-pointer min-w-[150px]"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="all">All Statuses</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="pending">Pending</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-
-            {/* Appointment Date Picker */}
-            <input
-              type="date"
-              aria-label="Filter by appointment date"
-              className="h-12 rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 font-medium focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all cursor-pointer min-w-[160px]"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-            />
-          </div>
-
-          {/* Clear Filters Button aligned to the far right */}
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="h-12 px-5 rounded-xl text-sm font-semibold text-purple-700 bg-purple-50 border border-purple-200/80 hover:bg-purple-100 transition-colors cursor-pointer flex items-center gap-2 shadow-2xs"
-            >
-              <RotateCcw className="h-4 w-4 text-purple-600" />
-              <span>Clear Filters</span>
-            </button>
-          </div>
+      <div className="bg-white rounded-[16px] border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[14px_18px] min-h-[76px] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 sm:gap-4">
+        {/* Search Input (approx 42-45% of width) */}
+        <div className="relative flex-[42] min-w-[280px]">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-[#94A3B8] pointer-events-none" />
+          <input
+            type="text"
+            aria-label="Search bookings"
+            className="h-[48px] w-full rounded-[12px] pl-11 pr-4 text-[14px] bg-white text-[#111827] border border-[#E2E8F0] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#6D28D9] focus:ring-2 focus:ring-[#6D28D9]/15 transition-all"
+            placeholder="Search by customer, phone, email, property, reference..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
 
-        {hasActiveFilters && (
-          <div className="pt-3 text-xs text-slate-500 font-medium">
-            Showing {filteredBookings.length} of {appointments.length} bookings matching your filters
-          </div>
-        )}
+        {/* Status Dropdown (approx 15% of width) */}
+        <div className="relative flex-[15] min-w-[150px] max-w-full lg:max-w-[180px]">
+          <select
+            aria-label="Filter by booking status"
+            className="h-[48px] w-full rounded-[12px] pl-4 pr-10 text-[14px] font-medium text-[#334155] bg-white border border-[#E2E8F0] focus:outline-none focus:border-[#6D28D9] focus:ring-2 focus:ring-[#6D28D9]/15 transition-all cursor-pointer appearance-none"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All Statuses</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="pending">Pending</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#94A3B8] pointer-events-none" />
+        </div>
+
+        {/* Date Picker (approx 17% of width) */}
+        <div className="relative flex-[17] min-w-[160px] max-w-full lg:max-w-[200px]">
+          <input
+            type="date"
+            aria-label="Filter by appointment date"
+            className="h-[48px] w-full rounded-[12px] px-3.5 text-[14px] font-medium text-[#334155] bg-white border border-[#E2E8F0] focus:outline-none focus:border-[#6D28D9] focus:ring-2 focus:ring-[#6D28D9]/15 transition-all cursor-pointer"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+          />
+        </div>
+
+        {/* Clear Filters Button (approx 150px-175px) */}
+        <div className="flex items-center shrink-0">
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="h-[48px] px-5 w-full lg:w-auto rounded-[12px] text-[14px] font-semibold text-[#6D28D9] bg-white border border-[#DDD6FE] hover:border-[#6D28D9] hover:bg-[#F8F6FF] active:bg-[#F1EDFF] transition-all cursor-pointer flex items-center justify-center gap-2 shadow-2xs"
+          >
+            <Filter className="h-4 w-4 text-[#6D28D9]" />
+            <span>Clear Filters</span>
+          </button>
+        </div>
       </div>
 
-      {/* 4. Bookings Table Card — exact 7 columns */}
-      <div className="rounded-2xl bg-white border border-slate-200/80 shadow-xs overflow-hidden">
+      {/* 4. Bookings Table Card — exact 7 columns & lavender header */}
+      <div className="rounded-[16px] bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse table-auto">
             <thead>
-              <tr className="bg-[#F8F9FD] border-b border-slate-200/80 text-[12px] font-bold text-slate-800 tracking-wider">
-                <th className="py-4 px-5 min-w-[180px]">CUSTOMER NAME</th>
-                <th className="py-4 px-5 min-w-[150px]">PHONE NUMBER</th>
-                <th className="py-4 px-5 min-w-[180px]">EMAIL</th>
-                <th className="py-4 px-5 min-w-[180px]">PROPERTY / LOCATION</th>
-                <th className="py-4 px-5 min-w-[160px]">APPOINTMENT DATE</th>
-                <th className="py-4 px-5 min-w-[180px]">APPOINTMENT TIME</th>
-                <th className="py-4 px-5 min-w-[140px]">BOOKING STATUS</th>
+              <tr className="bg-[#F1EDFF] border-b border-[#DDD6FE]/60 h-[46px]">
+                <th className="py-3.5 px-5 min-w-[170px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                  CUSTOMER NAME
+                </th>
+                <th className="py-3.5 px-5 min-w-[165px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                  PHONE NUMBER
+                </th>
+                <th className="py-3.5 px-5 min-w-[210px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                  EMAIL
+                </th>
+                <th className="py-3.5 px-5 min-w-[250px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                  PROPERTY / LOCATION
+                </th>
+                <th className="py-3.5 px-5 min-w-[175px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                  APPOINTMENT DATE
+                </th>
+                <th className="py-3.5 px-5 min-w-[185px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                  APPOINTMENT TIME
+                </th>
+                <th className="py-3.5 px-5 min-w-[145px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                  BOOKING STATUS
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-sm">
+            <tbody className="divide-y divide-[#F1F5F9] text-[14px]">
               {appointmentsLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center text-slate-500">
+                  <td colSpan={7} className="py-24 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center gap-3">
-                      <RefreshCw className="h-8 w-8 animate-spin text-purple-600" />
+                      <RefreshCw className="h-8 w-8 animate-spin text-[#6D28D9]" />
                       <span className="text-sm font-medium text-slate-600">Loading bookings...</span>
                     </div>
                   </td>
@@ -382,7 +398,7 @@ export const BookingsView: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => void loadAppointments()}
-                        className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs"
+                        className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#E2E8F0] text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs"
                       >
                         <RefreshCw className="h-3.5 w-3.5" /> Retry
                       </button>
@@ -391,10 +407,10 @@ export const BookingsView: React.FC = () => {
                 </tr>
               ) : filteredBookings.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-20 text-center text-slate-500">
+                  <td colSpan={7} className="py-24 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
-                      <div className="h-12 w-12 rounded-2xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600">
-                        <CalendarCheck className="h-6 w-6" />
+                      <div className="h-12 w-12 rounded-2xl bg-[#F1EDFF] border border-[#DDD6FE]/60 flex items-center justify-center text-[#6D28D9]">
+                        <CalendarCheck className="h-6 w-6 text-[#6D28D9]" />
                       </div>
                       <div className="space-y-1">
                         <p className="font-semibold text-slate-800 text-base">
@@ -410,9 +426,9 @@ export const BookingsView: React.FC = () => {
                         <button
                           type="button"
                           onClick={resetFilters}
-                          className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 cursor-pointer transition-colors shadow-2xs"
+                          className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-[#6D28D9] bg-white border border-[#DDD6FE] hover:bg-[#F8F6FF] cursor-pointer transition-colors shadow-2xs"
                         >
-                          <RotateCcw className="h-3.5 w-3.5" />
+                          <Filter className="h-3.5 w-3.5 text-[#6D28D9]" />
                           <span>Clear Filters</span>
                         </button>
                       ) : (
@@ -420,9 +436,9 @@ export const BookingsView: React.FC = () => {
                           type="button"
                           onClick={() => void loadAppointments()}
                           disabled={appointmentsLoading}
-                          className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors shadow-2xs"
+                          className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#E2E8F0] text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors shadow-2xs"
                         >
-                          <RefreshCw className={`h-3.5 w-3.5 ${appointmentsLoading ? "animate-spin" : ""}`} />
+                          <RefreshCw className={`h-3.5 w-3.5 text-[#6D28D9] ${appointmentsLoading ? "animate-spin" : ""}`} />
                           <span>Check for new bookings</span>
                         </button>
                       )}
@@ -445,35 +461,35 @@ export const BookingsView: React.FC = () => {
                     appointment.serviceName ||
                     "—";
                   const avatar = getAvatarPastel(customerName);
-                  const initials = getInitials(customerName);
+                  const initial = getInitials(customerName);
 
                   return (
                     <tr
                       key={appointment.id}
                       onClick={() => setSelectedBooking(appointment)}
                       title="Click to view booking details"
-                      className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                      className="h-[56px] min-h-[56px] hover:bg-[#FAF9FF] transition-colors cursor-pointer group"
                     >
                       {/* 1. CUSTOMER NAME */}
-                      <td className="py-4 px-5">
+                      <td className="py-3 px-5 whitespace-nowrap">
                         <div className="flex items-center gap-3">
                           <div
-                            className={`h-8 w-8 rounded-lg ${avatar.bg} ${avatar.text} flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs`}
+                            className={`h-[34px] w-[34px] rounded-[10px] ${avatar.bg} ${avatar.text} flex items-center justify-center font-bold text-[13px] shrink-0 shadow-2xs`}
                           >
-                            {initials}
+                            {initial}
                           </div>
-                          <span className="font-semibold text-slate-900 group-hover:text-purple-600 transition-colors">
+                          <span className="font-bold text-[14px] text-[#111827] group-hover:text-[#6D28D9] transition-colors">
                             {customerName}
                           </span>
                         </div>
                       </td>
 
                       {/* 2. PHONE NUMBER */}
-                      <td className="py-4 px-5 text-slate-600">
+                      <td className="py-3 px-5 text-[#1E293B] whitespace-nowrap font-medium text-[14px]">
                         {customerPhone !== "—" ? (
                           <span className="inline-flex items-center gap-2">
-                            <Phone className="h-4 w-4 text-purple-600 shrink-0" />
-                            <span className="font-medium text-slate-700">{customerPhone}</span>
+                            <Phone className="h-[15px] w-[15px] text-[#6D28D9] shrink-0" />
+                            <span>{customerPhone}</span>
                           </span>
                         ) : (
                           <span className="text-slate-400">—</span>
@@ -481,11 +497,11 @@ export const BookingsView: React.FC = () => {
                       </td>
 
                       {/* 3. EMAIL */}
-                      <td className="py-4 px-5 text-slate-600">
+                      <td className="py-3 px-5 text-[#1E293B] whitespace-nowrap text-[14px]">
                         {customerEmail !== "—" ? (
                           <span className="inline-flex items-center gap-2" title={customerEmail}>
-                            <Mail className="h-4 w-4 text-purple-500 shrink-0" />
-                            <span className="truncate max-w-[190px]">{customerEmail}</span>
+                            <Mail className="h-[15px] w-[15px] text-[#6D28D9] shrink-0" />
+                            <span className="truncate max-w-[210px]">{customerEmail}</span>
                           </span>
                         ) : (
                           <span className="text-slate-400">—</span>
@@ -493,11 +509,11 @@ export const BookingsView: React.FC = () => {
                       </td>
 
                       {/* 4. PROPERTY / LOCATION */}
-                      <td className="py-4 px-5 text-slate-700">
+                      <td className="py-3 px-5 text-[#1E293B] whitespace-nowrap text-[14px]">
                         {propertyLocation !== "—" ? (
                           <span className="inline-flex items-center gap-2" title={propertyLocation}>
-                            <MapPin className="h-4 w-4 text-purple-600 shrink-0" />
-                            <span className="font-medium text-slate-800 truncate max-w-[200px]">
+                            <MapPin className="h-[15px] w-[15px] text-[#6D28D9] shrink-0" />
+                            <span className="truncate max-w-[250px] font-normal">
                               {propertyLocation}
                             </span>
                           </span>
@@ -507,27 +523,23 @@ export const BookingsView: React.FC = () => {
                       </td>
 
                       {/* 5. APPOINTMENT DATE */}
-                      <td className="py-4 px-5 text-slate-700">
+                      <td className="py-3 px-5 text-[#1E293B] whitespace-nowrap text-[14px]">
                         <span className="inline-flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-purple-600 shrink-0" />
-                          <span className="font-medium text-slate-800">
-                            {formatBookingDate(appointment.startsAt)}
-                          </span>
+                          <Calendar className="h-[15px] w-[15px] text-[#6D28D9] shrink-0" />
+                          <span>{formatBookingDate(appointment.startsAt)}</span>
                         </span>
                       </td>
 
                       {/* 6. APPOINTMENT TIME */}
-                      <td className="py-4 px-5 text-slate-600">
+                      <td className="py-3 px-5 text-[#1E293B] whitespace-nowrap text-[14px]">
                         <span className="inline-flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-purple-600 shrink-0" />
-                          <span className="text-slate-700">
-                            {formatBookingTime(appointment.startsAt, appointment.timezone)}
-                          </span>
+                          <Clock className="h-[15px] w-[15px] text-[#6D28D9] shrink-0" />
+                          <span>{formatBookingTime(appointment.startsAt, appointment.timezone)}</span>
                         </span>
                       </td>
 
                       {/* 7. BOOKING STATUS */}
-                      <td className="py-4 px-5">
+                      <td className="py-3 px-5 whitespace-nowrap">
                         <BookingStatusPill status={appointment.status} />
                       </td>
                     </tr>
@@ -578,20 +590,20 @@ export const BookingsView: React.FC = () => {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="booking-details-title"
-                className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+                className="w-full max-w-lg rounded-[20px] border border-[#E2E8F0] bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Modal Header */}
-                <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-[#F8F9FD]">
+                <div className="flex items-center justify-between border-b border-[#E2E8F0]/80 px-6 py-4 bg-[#F1EDFF]">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shadow-2xs">
-                      <CalendarCheck className="h-5 w-5 text-purple-600" />
+                    <div className="h-10 w-10 rounded-[12px] bg-white border border-[#DDD6FE] flex items-center justify-center text-[#6D28D9] shadow-2xs">
+                      <CalendarCheck className="h-5 w-5 text-[#6D28D9]" />
                     </div>
                     <div>
-                      <h2 id="booking-details-title" className="text-base font-bold text-slate-900">
+                      <h2 id="booking-details-title" className="text-base font-bold text-[#111827]">
                         Booking Details
                       </h2>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-[#64748B]">
                         Cal.com appointment record
                       </p>
                     </div>
@@ -600,7 +612,7 @@ export const BookingsView: React.FC = () => {
                     type="button"
                     aria-label="Close"
                     onClick={() => setSelectedBooking(null)}
-                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors cursor-pointer"
+                    className="rounded-lg p-1 text-[#64748B] hover:bg-white/80 hover:text-[#111827] transition-colors cursor-pointer"
                   >
                     <X className="h-5 w-5" />
                   </button>
@@ -609,30 +621,30 @@ export const BookingsView: React.FC = () => {
                 {/* Modal Body */}
                 <div className="p-6 space-y-5 overflow-y-auto">
                   {/* Status Banner */}
-                  <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                    <div className="text-xs font-medium text-slate-600">Booking Status</div>
+                  <div className="flex items-center justify-between p-3.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0]">
+                    <div className="text-xs font-semibold text-[#64748B]">Booking Status</div>
                     <BookingStatusPill status={selectedBooking.status} />
                   </div>
 
                   {/* Attendee Info */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  <div className="space-y-2.5">
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#94A3B8]">
                       Attendee Information
                     </h3>
-                    <div className="rounded-xl border border-slate-200/80 p-3.5 space-y-2.5 bg-white">
+                    <div className="rounded-[14px] border border-[#E2E8F0] p-3.5 space-y-2.5 bg-white">
                       <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-purple-600 shrink-0" />
-                        <span className="text-sm font-semibold text-slate-900">{customerName}</span>
+                        <User className="h-4 w-4 text-[#6D28D9] shrink-0" />
+                        <span className="text-[14px] font-bold text-[#111827]">{customerName}</span>
                       </div>
                       {customerPhone && (
-                        <div className="flex items-center gap-2 text-xs text-slate-600">
-                          <Phone className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+                        <div className="flex items-center gap-2 text-xs text-[#334155]">
+                          <Phone className="h-3.5 w-3.5 text-[#6D28D9] shrink-0" />
                           <span>{customerPhone}</span>
                         </div>
                       )}
                       {customerEmail && (
-                        <div className="flex items-center gap-2 text-xs text-slate-600">
-                          <Mail className="h-3.5 w-3.5 text-purple-500 shrink-0" />
+                        <div className="flex items-center gap-2 text-xs text-[#334155]">
+                          <Mail className="h-3.5 w-3.5 text-[#6D28D9] shrink-0" />
                           <span>{customerEmail}</span>
                         </div>
                       )}
@@ -640,27 +652,27 @@ export const BookingsView: React.FC = () => {
                   </div>
 
                   {/* Schedule Details */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  <div className="space-y-2.5">
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#94A3B8]">
                       Appointment Schedule
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="rounded-xl border border-slate-200/80 p-3 bg-white space-y-1">
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-                          <Calendar className="h-3.5 w-3.5 text-purple-600" />
+                      <div className="rounded-[14px] border border-[#E2E8F0] p-3 bg-white space-y-1">
+                        <div className="flex items-center gap-1.5 text-xs text-[#64748B] font-medium">
+                          <Calendar className="h-3.5 w-3.5 text-[#6D28D9]" />
                           <span>Date</span>
                         </div>
-                        <div className="text-sm font-semibold text-slate-800">
+                        <div className="text-[14px] font-bold text-[#111827]">
                           {formatBookingDate(selectedBooking.startsAt)}
                         </div>
                       </div>
 
-                      <div className="rounded-xl border border-slate-200/80 p-3 bg-white space-y-1">
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-                          <Clock className="h-3.5 w-3.5 text-purple-600" />
+                      <div className="rounded-[14px] border border-[#E2E8F0] p-3 bg-white space-y-1">
+                        <div className="flex items-center gap-1.5 text-xs text-[#64748B] font-medium">
+                          <Clock className="h-3.5 w-3.5 text-[#6D28D9]" />
                           <span>Time</span>
                         </div>
-                        <div className="text-sm font-semibold text-slate-800">
+                        <div className="text-[14px] font-bold text-[#111827]">
                           {formatBookingTime(selectedBooking.startsAt, selectedBooking.timezone)}
                         </div>
                       </div>
@@ -668,33 +680,33 @@ export const BookingsView: React.FC = () => {
                   </div>
 
                   {/* Service & Property */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  <div className="space-y-2.5">
+                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#94A3B8]">
                       Service &amp; Property Details
                     </h3>
-                    <div className="rounded-xl border border-slate-200/80 p-3.5 space-y-2 bg-white text-xs">
+                    <div className="rounded-[14px] border border-[#E2E8F0] p-3.5 space-y-2 bg-white text-xs">
                       <div className="flex items-start justify-between gap-2">
-                        <span className="text-slate-500">Service:</span>
-                        <span className="font-semibold text-slate-800 text-right">{serviceName}</span>
+                        <span className="text-[#64748B]">Service:</span>
+                        <span className="font-semibold text-[#111827] text-right">{serviceName}</span>
                       </div>
                       {propertyLocation && (
                         <div className="flex items-start justify-between gap-2">
-                          <span className="text-slate-500">Property / Location:</span>
-                          <span className="font-medium text-slate-800 text-right">{propertyLocation}</span>
+                          <span className="text-[#64748B]">Property / Location:</span>
+                          <span className="font-medium text-[#111827] text-right">{propertyLocation}</span>
                         </div>
                       )}
                       {calcomRef && (
                         <div className="flex items-start justify-between gap-2">
-                          <span className="text-slate-500">Cal.com Booking Reference:</span>
-                          <span className="font-mono font-medium text-purple-700 bg-purple-50 px-2 py-0.5 rounded text-right">
+                          <span className="text-[#64748B]">Cal.com Booking Reference:</span>
+                          <span className="font-mono font-medium text-[#6D28D9] bg-[#F1EDFF] px-2 py-0.5 rounded text-right">
                             {calcomRef}
                           </span>
                         </div>
                       )}
                       {selectedBooking.createdAt && (
                         <div className="flex items-start justify-between gap-2">
-                          <span className="text-slate-500">Recorded At:</span>
-                          <span className="text-slate-700 text-right">
+                          <span className="text-[#64748B]">Recorded At:</span>
+                          <span className="text-[#334155] text-right">
                             {new Date(selectedBooking.createdAt).toLocaleString()}
                           </span>
                         </div>
@@ -705,10 +717,10 @@ export const BookingsView: React.FC = () => {
                   {/* Notes / Description if available */}
                   {notes && (
                     <div className="space-y-2">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#94A3B8]">
                         Notes &amp; Details
                       </h3>
-                      <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-3 text-xs text-slate-700">
+                      <div className="rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] p-3 text-xs text-[#334155]">
                         {notes}
                       </div>
                     </div>
@@ -716,14 +728,14 @@ export const BookingsView: React.FC = () => {
                 </div>
 
                 {/* Modal Footer */}
-                <div className="flex items-center justify-between border-t border-slate-100 px-6 py-3.5 bg-[#F8F9FD]">
-                  <span className="text-xs text-slate-500">
+                <div className="flex items-center justify-between border-t border-[#E2E8F0] px-6 py-3.5 bg-[#F8FAFC]">
+                  <span className="text-xs text-[#64748B]">
                     Click anywhere outside to close
                   </span>
                   <button
                     type="button"
                     onClick={() => setSelectedBooking(null)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs transition-colors"
+                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#E2E8F0] text-[#111827] hover:bg-slate-50 cursor-pointer shadow-2xs transition-colors"
                   >
                     Close
                   </button>
