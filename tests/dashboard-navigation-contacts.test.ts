@@ -411,7 +411,7 @@ test("11. Customers section is completely removed from CRM navigation and interf
   );
 });
 
-test("12. Contacts page and CRM Leads functionality are fully preserved", () => {
+test("12. Contacts page is preserved and CRM leads are separated into dedicated Leads module", () => {
   const pageFile = fs.readFileSync(
     path.join(process.cwd(), "app", "page.tsx"),
     "utf-8",
@@ -435,9 +435,12 @@ test("12. Contacts page and CRM Leads functionality are fully preserved", () => 
     "utf-8",
   );
 
-  assert.ok(crmFile.includes('{ key: "leads", label: "Leads" }'), "Leads tab must exist in CRM");
+  // Leads table and tab must no longer exist in CRM
+  assert.ok(!crmFile.includes('{ key: "leads", label: "Leads" }'), "Leads tab must be removed from CRM");
+  assert.ok(!crmFile.includes('<Table>'), "Embedded contacts table must be removed from CRM");
   assert.ok(!crmFile.includes('{ key: "followups", label: "Follow-Ups" }'), "Follow-Ups must be removed from CRM tabs");
   assert.ok(!crmFile.includes('{ key: "bookings", label: "Bookings" }'), "Bookings must be removed from CRM tabs");
+  assert.ok(crmFile.includes('href="#/leads"'), "CRM must link to dedicated Leads page");
 });
 
 test("13. Dedicated Bookings page is implemented with independent navigation, table columns, and details modal", () => {
@@ -581,4 +584,79 @@ test("14. Dedicated Follow-Ups page is implemented with independent navigation, 
   assert.ok(followupsFile.includes("Clear Filters"), "Must have Clear Filters button");
   assert.ok(followupsFile.includes("Refresh"), "Must have refresh button");
   assert.ok(followupsFile.includes("Follow-Up Details"), "Must have follow-up details dialog");
+});
+
+test("15. Dedicated Leads page is implemented with independent navigation, center-aligned cards, search toolbar, 8 table columns, and details modal", () => {
+  const pageFile = fs.readFileSync(
+    path.join(process.cwd(), "app", "page.tsx"),
+    "utf-8",
+  );
+
+  assert.ok(
+    pageFile.includes('"leads": { breadcrumb: "Leads", component: LeadsView }'),
+    "Leads route must exist in routeConfig",
+  );
+  assert.ok(
+    pageFile.includes('href="#/leads"'),
+    "Dedicated Leads link must exist in sidebar",
+  );
+  assert.ok(
+    pageFile.includes("UserRoundSearch"),
+    "UserRoundSearch icon must be used for Leads navigation",
+  );
+
+  // Verify Leads is placed directly below Follow-Ups and above CRM in the sidebar
+  const bookingsIndex = pageFile.indexOf('href="#/bookings"');
+  const followupsIndex = pageFile.indexOf('href="#/follow-ups"');
+  const leadsIndex = pageFile.indexOf('href="#/leads"');
+  const crmIndex = pageFile.indexOf('href="#/crm"');
+  assert.ok(
+    bookingsIndex < followupsIndex && followupsIndex < leadsIndex && leadsIndex < crmIndex,
+    "Leads navigation item must be placed directly below Follow-Ups and above CRM",
+  );
+
+  const leadsFilePath = path.join(process.cwd(), "components", "views", "leads-view.tsx");
+  assert.ok(fs.existsSync(leadsFilePath), "LeadsView component file must exist");
+  const leadsFile = fs.readFileSync(leadsFilePath, "utf-8");
+
+  // Verify Heading & Description
+  assert.ok(leadsFile.includes("Leads"), "Heading must contain Leads");
+  assert.ok(
+    leadsFile.includes("Manage prospective customers and track their interest in Boomi Solutions properties and services."),
+    "Must have specified description",
+  );
+
+  // Verify 4 Center-Aligned Statistics Cards
+  assert.ok(leadsFile.includes("Total Leads"), "Must have Total Leads card");
+  assert.ok(leadsFile.includes("New Leads"), "Must have New Leads card");
+  assert.ok(leadsFile.includes("Contacted Leads"), "Must have Contacted Leads card");
+  assert.ok(leadsFile.includes("Converted Leads"), "Must have Converted Leads card");
+  assert.ok(
+    leadsFile.includes("flex-col items-center justify-center text-center"),
+    "Summary cards must have center-aligned content",
+  );
+
+  // Verify Exact 8 Table Columns
+  assert.ok(leadsFile.includes("CUSTOMER NAME"), "Must have CUSTOMER NAME column");
+  assert.ok(leadsFile.includes("PHONE NUMBER"), "Must have PHONE NUMBER column");
+  assert.ok(leadsFile.includes("EMAIL"), "Must have EMAIL column");
+  assert.ok(leadsFile.includes("PROPERTY / REQUIREMENT"), "Must have PROPERTY / REQUIREMENT column");
+  assert.ok(leadsFile.includes("LEAD SOURCE"), "Must have LEAD SOURCE column");
+  assert.ok(leadsFile.includes("DATE CREATED"), "Must have DATE CREATED column");
+  assert.ok(leadsFile.includes("LEAD STATUS"), "Must have LEAD STATUS column");
+  assert.ok(leadsFile.includes("ACTIONS"), "Must have ACTIONS column");
+  assert.ok(leadsFile.includes("min-w-[1080px]"), "Table must enforce responsive minimum width");
+  assert.ok(leadsFile.includes("overflow-x-auto"), "Table wrapper must have overflow-x-auto for container-only scrolling");
+
+  // Verify Controls & Actions
+  assert.ok(leadsFile.includes("Search leads"), "Must have search input");
+  assert.ok(leadsFile.includes('paddingLeft: "44px"'), "Search input must have 44px left padding so icon does not overlap placeholder");
+  assert.ok(leadsFile.includes("Filter by lead status"), "Must have status filter");
+  assert.ok(leadsFile.includes("Filter by date created"), "Must have date filter");
+  assert.ok(leadsFile.includes("Clear Filters"), "Must have Clear Filters button");
+  assert.ok(leadsFile.includes("Refresh"), "Must have refresh button");
+  assert.ok(leadsFile.includes("Add Lead"), "Must have Add Lead button");
+  assert.ok(leadsFile.includes("lead-details-title"), "Must have lead details modal");
+  assert.ok(leadsFile.includes("lead-form-title"), "Must have lead edit/create modal");
+  assert.ok(leadsFile.includes("call-lead-title"), "Must have outbound call confirmation modal");
 });
