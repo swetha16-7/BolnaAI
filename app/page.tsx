@@ -19,6 +19,7 @@ import {
   XCircle,
   Contact,
   CalendarCheck,
+  MessageSquareText,
 } from "lucide-react";
 
 // Views
@@ -30,6 +31,7 @@ import { CallHistoryView } from "@/components/views/call-history-view";
 import { CrmView } from "@/components/views/crm-view";
 import { ContactsView } from "@/components/views/contacts-view";
 import { BookingsView } from "@/components/views/bookings-view";
+import { FollowUpsView } from "@/components/views/follow-ups-view";
 import { AnalyticsView } from "@/components/views/analytics-view";
 import { ProfileView } from "@/components/views/profile-view";
 import { AuthView } from "@/components/auth/auth-view";
@@ -43,6 +45,7 @@ const routeConfig: Record<string, { breadcrumb: string; component: React.Compone
   "crm": { breadcrumb: "CRM", component: CrmView },
   "contacts": { breadcrumb: "Contacts", component: ContactsView },
   "bookings": { breadcrumb: "Bookings", component: BookingsView },
+  "follow-ups": { breadcrumb: "Follow-Ups", component: FollowUpsView },
   "call-history": { breadcrumb: "Call History", component: CallHistoryView },
   "analytics": { breadcrumb: "Analytics", component: AnalyticsView },
   "profile": { breadcrumb: "Admin Profile", component: ProfileView }
@@ -302,6 +305,16 @@ export default function Home() {
               >
                 <CalendarCheck size={18} />
                 <span>Bookings</span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="#/follow-ups"
+                className={`nav-item ${activeRoute === "follow-ups" ? "active" : ""}`}
+                data-page="follow-ups"
+              >
+                <MessageSquareText size={18} />
+                <span>Follow-Ups</span>
               </a>
             </li>
             <li>

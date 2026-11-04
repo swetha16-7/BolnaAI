@@ -411,7 +411,7 @@ test("11. Customers section is completely removed from CRM navigation and interf
   );
 });
 
-test("12. Contacts page and CRM Leads and Follow-Ups functionality are fully preserved", () => {
+test("12. Contacts page and CRM Leads functionality are fully preserved", () => {
   const pageFile = fs.readFileSync(
     path.join(process.cwd(), "app", "page.tsx"),
     "utf-8",
@@ -436,7 +436,7 @@ test("12. Contacts page and CRM Leads and Follow-Ups functionality are fully pre
   );
 
   assert.ok(crmFile.includes('{ key: "leads", label: "Leads" }'), "Leads tab must exist in CRM");
-  assert.ok(crmFile.includes('{ key: "followups", label: "Follow-Ups" }'), "Follow-Ups tab must exist in CRM");
+  assert.ok(!crmFile.includes('{ key: "followups", label: "Follow-Ups" }'), "Follow-Ups must be removed from CRM tabs");
   assert.ok(!crmFile.includes('{ key: "bookings", label: "Bookings" }'), "Bookings must be removed from CRM tabs");
 });
 
@@ -506,4 +506,72 @@ test("13. Dedicated Bookings page is implemented with independent navigation, ta
   assert.ok(bookingsFile.includes("Refresh"), "Must have refresh button");
   assert.ok(bookingsFile.includes("Booking Details"), "Must have booking details dialog");
   assert.ok(bookingsFile.includes("Cal.com Booking Reference"), "Must have Cal.com reference in booking details");
+});
+
+test("14. Dedicated Follow-Ups page is implemented with independent navigation, center-aligned cards, search toolbar, 7 table columns, and details modal", () => {
+  const pageFile = fs.readFileSync(
+    path.join(process.cwd(), "app", "page.tsx"),
+    "utf-8",
+  );
+
+  assert.ok(
+    pageFile.includes('"follow-ups": { breadcrumb: "Follow-Ups", component: FollowUpsView }'),
+    "Follow-Ups route must exist in routeConfig",
+  );
+  assert.ok(
+    pageFile.includes('href="#/follow-ups"'),
+    "Dedicated Follow-Ups link must exist in sidebar",
+  );
+  assert.ok(
+    pageFile.includes("MessageSquareText"),
+    "MessageSquareText icon must be used for Follow-Ups navigation",
+  );
+
+  // Verify Follow-Ups is placed directly below Bookings and above CRM in the sidebar
+  const bookingsIndex = pageFile.indexOf('href="#/bookings"');
+  const followupsIndex = pageFile.indexOf('href="#/follow-ups"');
+  const crmIndex = pageFile.indexOf('href="#/crm"');
+  assert.ok(
+    bookingsIndex < followupsIndex && followupsIndex < crmIndex,
+    "Follow-Ups navigation item must be placed directly below Bookings and above CRM",
+  );
+
+  const followupsFilePath = path.join(process.cwd(), "components", "views", "follow-ups-view.tsx");
+  assert.ok(fs.existsSync(followupsFilePath), "FollowUpsView component file must exist");
+  const followupsFile = fs.readFileSync(followupsFilePath, "utf-8");
+
+  // Verify Heading & Description
+  assert.ok(followupsFile.includes("Follow-Ups"), "Heading must contain Follow-Ups");
+  assert.ok(
+    followupsFile.includes("Manage caller messages, customer enquiries, and pending follow-up activities."),
+    "Must have specified description",
+  );
+
+  // Verify 4 Center-Aligned Statistics Cards
+  assert.ok(followupsFile.includes("Total Follow-Ups"), "Must have Total Follow-Ups card");
+  assert.ok(followupsFile.includes("Pending"), "Must have Pending card");
+  assert.ok(followupsFile.includes("Contacted"), "Must have Contacted card");
+  assert.ok(followupsFile.includes("Completed"), "Must have Completed card");
+  assert.ok(
+    followupsFile.includes("flex-col items-center justify-center text-center"),
+    "Summary cards must have center-aligned content",
+  );
+
+  // Verify Exact 7 Table Columns
+  assert.ok(followupsFile.includes("CUSTOMER NAME"), "Must have CUSTOMER NAME column");
+  assert.ok(followupsFile.includes("PHONE NUMBER"), "Must have PHONE NUMBER column");
+  assert.ok(followupsFile.includes("EMAIL"), "Must have EMAIL column");
+  assert.ok(followupsFile.includes("MESSAGE / ENQUIRY"), "Must have MESSAGE / ENQUIRY column");
+  assert.ok(followupsFile.includes("DATE RECEIVED"), "Must have DATE RECEIVED column");
+  assert.ok(followupsFile.includes("FOLLOW-UP STATUS"), "Must have FOLLOW-UP STATUS column");
+  assert.ok(followupsFile.includes("ACTIONS"), "Must have ACTIONS column");
+
+  // Verify Controls & Actions
+  assert.ok(followupsFile.includes("Search follow-ups"), "Must have search input");
+  assert.ok(followupsFile.includes('paddingLeft: "44px"'), "Search input must have 44px left padding so icon does not overlap placeholder");
+  assert.ok(followupsFile.includes("Filter by follow-up status"), "Must have status filter");
+  assert.ok(followupsFile.includes("Filter by date received"), "Must have date filter");
+  assert.ok(followupsFile.includes("Clear Filters"), "Must have Clear Filters button");
+  assert.ok(followupsFile.includes("Refresh"), "Must have refresh button");
+  assert.ok(followupsFile.includes("Follow-Up Details"), "Must have follow-up details dialog");
 });

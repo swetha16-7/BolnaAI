@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { PageHeader } from "@/components/shared/page-header";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -15,11 +14,10 @@ import {
 } from "@/components/ui/table";
 import { useAppState, type ContactRecord } from "@/context/StateContext";
 import { generateSecureClientUuid } from "@/lib/utils";
-import { Mail, Phone, PhoneCall, Plus, Search, Pencil, X, RefreshCw } from "lucide-react";
+import { Mail, Phone, PhoneCall, Plus, Search, Pencil, X } from "lucide-react";
 
 const tabs = [
   { key: "leads", label: "Leads" },
-  { key: "followups", label: "Follow-Ups" },
 ] as const;
 
 type CrmTab = (typeof tabs)[number]["key"];
@@ -68,11 +66,6 @@ export const CrmView: React.FC = () => {
     agents,
     createCall,
     showToast,
-    messages,
-    messagesLoading,
-    messagesError,
-    loadMessages,
-    updateMessageStatus,
   } = useAppState();
   const [activeTab, setActiveTab] = useState<CrmTab>("leads");
   const [search, setSearch] = useState("");
@@ -85,7 +78,6 @@ export const CrmView: React.FC = () => {
   const [callAgentId, setCallAgentId] = useState("");
   const [callSubmitting, setCallSubmitting] = useState(false);
   const [callConsentConfirmed, setCallConsentConfirmed] = useState(false);
-  const [updatingMessageId, setUpdatingMessageId] = useState<string | null>(null);
 
   const callAgents = agents.filter((agent) => agent.status === "active" && agent.retellAgentId.trim());
 
@@ -102,12 +94,6 @@ export const CrmView: React.FC = () => {
     }, 250);
     return () => window.clearTimeout(timeout);
   }, [search, statusFilter, loadContacts]);
-
-  useEffect(() => {
-    if (activeTab === "followups") {
-      void loadMessages();
-    }
-  }, [activeTab, loadMessages]);
 
   const beginCreate = () => {
     setEditing(null);
@@ -224,15 +210,13 @@ export const CrmView: React.FC = () => {
   return (
     <div>
       <PageHeader
-        title="Leads & Follow-Ups"
-        description="Manage organization contacts and caller messages stored in your workspace"
+        title="CRM Leads"
+        description="Manage organization contacts, consent, and voice contact eligibility"
       >
-        {activeTab === "leads" && (
-          <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" onClick={beginCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Contact
-          </Button>
-        )}
+        <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" onClick={beginCreate}>
+          <Plus className="mr-2 h-4 w-4" />
+          Add Contact
+        </Button>
       </PageHeader>
 
       <div className="mb-6 flex flex-wrap gap-2">
@@ -365,114 +349,6 @@ export const CrmView: React.FC = () => {
                         <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
                       </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
-
-      {activeTab === "followups" && (
-        <Card className="border-border/60">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6 py-4">
-            <div>
-              <h3 className="text-lg font-semibold">Caller Messages &amp; Follow-Ups</h3>
-              <p className="text-xs text-muted-foreground">
-                Inquiries, callback requests, and notes captured by Retell AI voice agents
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void loadMessages()}
-              disabled={messagesLoading}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${messagesLoading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          </div>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Caller</TableHead>
-                  <TableHead>Message &amp; Reason</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Received</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {messagesLoading ? (
-                  <TableRow><TableCell colSpan={6} className="py-8 text-center">Loading messages...</TableCell></TableRow>
-                ) : messagesError ? (
-                  <TableRow><TableCell colSpan={6} role="alert" className="py-8 text-center">{messagesError}</TableCell></TableRow>
-                ) : messages.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No caller messages or follow-ups have been recorded.</TableCell></TableRow>
-                ) : messages.map((msg) => (
-                  <TableRow key={msg.id}>
-                    <TableCell>
-                      <div className="font-medium">{msg.callerName}</div>
-                      <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-                        {msg.phoneNumber && (
-                          <span className="flex items-center gap-1">
-                            <Phone className="h-3 w-3" />
-                            {msg.phoneNumber}
-                          </span>
-                        )}
-                        {msg.email && (
-                          <span className="flex items-center gap-1">
-                            <Mail className="h-3 w-3" />
-                            {msg.email}
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-md">
-                      <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
-                      {msg.reason && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          <span className="font-medium text-foreground">Reason:</span> {msg.reason}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {msg.isDnc ? (
-                        <span className="inline-flex items-center rounded-full bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-400">
-                          Do Not Call
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400">
-                          Callback
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(msg.createdAt).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={msg.status} />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={updatingMessageId === msg.id}
-                        onClick={async () => {
-                          setUpdatingMessageId(msg.id);
-                          try {
-                            const newStatus = msg.status === "handled" ? "pending" : "handled";
-                            await updateMessageStatus(msg.id, newStatus);
-                          } finally {
-                            setUpdatingMessageId(null);
-                          }
-                        }}
-                      >
-                        {msg.status === "handled" ? "Mark Pending" : "Mark Handled"}
-                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
