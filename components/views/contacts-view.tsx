@@ -598,31 +598,36 @@ export const ContactsView: React.FC = () => {
 
       {/* Contact Details Slide-over Panel */}
       {selectedContact && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm" role="presentation">
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs"
+          role="presentation"
+          onClick={() => setSelectedContact(null)}
+        >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="contact-detail-title"
-            className="flex h-full w-full max-w-xl flex-col bg-background shadow-2xl border-l border-border animate-in slide-in-from-right duration-200"
+            className="flex h-full h-dvh max-h-dvh w-full max-w-full sm:max-w-[560px] flex-col bg-white border-l border-slate-200 shadow-2xl animate-in slide-in-from-right duration-200 min-w-0 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-muted/20">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 sm:px-6 py-4 bg-slate-50/80 shrink-0 gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <div
-                  className={`flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold shadow-sm ${getAvatarColor(
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold shadow-xs ${getAvatarColor(
                     selectedContact.firstName + (selectedContact.lastName || ""),
                   )}`}
                 >
                   {getInitials(selectedContact.firstName, selectedContact.lastName)}
                 </div>
-                <div>
-                  <h2 id="contact-detail-title" className="text-lg font-semibold text-foreground">
+                <div className="min-w-0">
+                  <h2 id="contact-detail-title" className="text-base sm:text-lg font-bold text-slate-900 truncate">
                     {selectedContact.firstName} {selectedContact.lastName ?? ""}
                   </h2>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <StatusBadge status={selectedContact.status} />
                     {selectedContact.doNotCall && (
-                      <span className="inline-flex items-center gap-1 rounded bg-rose-500/10 px-2 py-0.5 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                      <span className="inline-flex items-center gap-1 rounded bg-rose-500/10 px-2 py-0.5 text-xs font-semibold text-rose-600">
                         <PhoneOff className="h-3 w-3" /> Do Not Call
                       </span>
                     )}
@@ -630,8 +635,9 @@ export const ContactsView: React.FC = () => {
                 </div>
               </div>
               <button
+                type="button"
                 aria-label="Close details"
-                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/70 hover:text-slate-800 transition-colors shrink-0 cursor-pointer"
                 onClick={() => setSelectedContact(null)}
               >
                 <X className="h-5 w-5" />
@@ -639,16 +645,17 @@ export const ContactsView: React.FC = () => {
             </div>
 
             {/* Scrollable Body */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-6 py-5 space-y-5 min-w-0">
               {/* Primary Contact Details Grid */}
-              <div className="grid grid-cols-2 gap-4 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-                <div>
-                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Phone Number</span>
-                  <div className="mt-1 flex items-center gap-2 font-mono text-sm font-medium text-foreground">
-                    <span>{selectedContact.phone || "Not available"}</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+                <div className="min-w-0">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Phone Number</span>
+                  <div className="mt-1 flex items-center gap-2 font-mono text-sm font-medium text-slate-900 min-w-0">
+                    <span className="break-all">{selectedContact.phone || "Not available"}</span>
                     {selectedContact.phone && (
                       <button
-                        className="text-muted-foreground hover:text-foreground"
+                        type="button"
+                        className="text-slate-400 hover:text-slate-700 shrink-0 cursor-pointer p-0.5"
                         onClick={() => handleCopy(selectedContact.phone!, "Phone number")}
                         title="Copy phone"
                       >
@@ -662,33 +669,34 @@ export const ContactsView: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Email Address</span>
-                  <div className="mt-1 text-sm font-medium text-foreground truncate">
+                <div className="min-w-0">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Email Address</span>
+                  <div className="mt-1 text-sm font-medium text-slate-900 break-all [overflow-wrap:anywhere]">
                     {selectedContact.email || "Not available"}
                   </div>
                 </div>
 
-                <div>
-                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Company</span>
-                  <div className="mt-1 text-sm font-medium text-foreground">
+                <div className="min-w-0">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Company</span>
+                  <div className="mt-1 text-sm font-medium text-slate-900 break-words">
                     {selectedContact.company || "Not available"}
                   </div>
                 </div>
 
-                <div>
-                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Title / Role</span>
-                  <div className="mt-1 text-sm font-medium text-foreground">
+                <div className="min-w-0">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Title / Role</span>
+                  <div className="mt-1 text-sm font-medium text-slate-900 break-words">
                     {selectedContact.title || "Not available"}
                   </div>
                 </div>
 
-                <div className="col-span-2 border-t border-border/60 pt-3 flex items-center justify-between">
-                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Contact ID</span>
-                  <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
-                    <span>{selectedContact.id}</span>
+                <div className="col-span-1 sm:col-span-2 border-t border-slate-100 pt-3 flex flex-wrap items-center justify-between gap-2 min-w-0">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 shrink-0">Contact ID</span>
+                  <div className="flex items-center gap-1.5 font-mono text-xs text-slate-600 min-w-0">
+                    <span className="break-all">{selectedContact.id}</span>
                     <button
-                      className="text-muted-foreground hover:text-foreground"
+                      type="button"
+                      className="text-slate-400 hover:text-slate-700 shrink-0 cursor-pointer p-0.5"
                       onClick={() => handleCopy(selectedContact.id, "Contact ID")}
                       title="Copy ID"
                     >
@@ -703,15 +711,15 @@ export const ContactsView: React.FC = () => {
               </div>
 
               {/* Consent and Compliance Panel */}
-              <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm space-y-3">
-                <div className="flex items-center gap-2 font-medium text-sm text-foreground">
-                  <ShieldCheck className="h-4 w-4 text-indigo-600" />
-                  <span>Voice Call Consent & Compliance</span>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
+                <div className="flex items-center gap-2 font-semibold text-sm text-slate-900">
+                  <ShieldCheck className="h-4 w-4 text-indigo-600 shrink-0" />
+                  <span>Voice Call Consent &amp; Compliance</span>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div>
-                    <span className="text-muted-foreground">Consent Status:</span>
-                    <span className="block mt-0.5 font-semibold text-foreground">
+                    <span className="text-slate-500 font-medium">Consent Status:</span>
+                    <span className="block mt-0.5 font-semibold text-slate-900">
                       {selectedContact.voiceConsentAt && !selectedContact.doNotCall
                         ? "Granted"
                         : selectedContact.doNotCall
@@ -720,14 +728,14 @@ export const ContactsView: React.FC = () => {
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Consent Source:</span>
-                    <span className="block mt-0.5 font-medium text-foreground capitalize">
+                    <span className="text-slate-500 font-medium">Consent Source:</span>
+                    <span className="block mt-0.5 font-medium text-slate-900 capitalize">
                       {selectedContact.voiceConsentSource || "Not available"}
                     </span>
                   </div>
                   {selectedContact.voiceConsentEvidence && (
-                    <div className="col-span-2 rounded bg-muted/40 p-2.5 text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground">Evidence note: </span>
+                    <div className="col-span-1 sm:col-span-2 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-700 border border-slate-200/80 break-words">
+                      <span className="font-semibold text-slate-900">Evidence note: </span>
                       {selectedContact.voiceConsentEvidence}
                     </div>
                   )}
@@ -736,19 +744,19 @@ export const ContactsView: React.FC = () => {
 
               {/* Associated Conversations / Calls Section */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-foreground">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold text-slate-900">
                     Associated Conversations ({selectedContact.calls?.length || 0})
                   </h3>
                   {selectedContact.lastConversationAt && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-slate-500">
                       Latest: {formatDateTime(selectedContact.lastConversationAt)}
                     </span>
                   )}
                 </div>
 
                 {!selectedContact.calls || selectedContact.calls.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border p-6 text-center text-muted-foreground">
+                  <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-slate-500">
                     <p className="text-sm font-medium">No conversations yet</p>
                     <p className="text-xs mt-1">There are no call records associated with this contact.</p>
                   </div>
@@ -759,14 +767,15 @@ export const ContactsView: React.FC = () => {
                       return (
                         <div
                           key={call.id}
-                          className="rounded-xl border border-border/70 bg-card p-4 shadow-sm space-y-2 hover:border-indigo-500/40 transition-colors"
+                          className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-2.5 hover:border-indigo-400/50 transition-colors"
                         >
-                          <div className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-1.5 font-mono">
-                              <span className="font-semibold text-foreground">ID:</span>
-                              <span className="text-muted-foreground">{displayCallId}</span>
+                          <div className="flex items-center justify-between gap-2 text-xs">
+                            <div className="flex items-center gap-1.5 font-mono min-w-0">
+                              <span className="font-bold text-slate-900 shrink-0">ID:</span>
+                              <span className="text-slate-600 truncate">{displayCallId}</span>
                               <button
-                                className="text-muted-foreground hover:text-foreground"
+                                type="button"
+                                className="text-slate-400 hover:text-slate-700 shrink-0 cursor-pointer p-0.5"
                                 onClick={() => handleCopy(displayCallId, "Call ID")}
                                 title="Copy Call ID"
                               >
@@ -777,30 +786,30 @@ export const ContactsView: React.FC = () => {
                                 )}
                               </button>
                             </div>
-                            <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 font-medium capitalize text-slate-700 dark:text-slate-300">
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold capitalize text-slate-700 shrink-0 text-[11px] border border-slate-200">
                               {call.direction || "outbound"}
                             </span>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                             <span>
-                              Status: <strong className="text-foreground capitalize">{call.status}</strong>
+                              Status: <strong className="text-slate-800 capitalize">{call.status}</strong>
                             </span>
                             <span>
-                              Duration: <strong className="text-foreground">{formatDuration(call.durationSeconds)}</strong>
+                              Duration: <strong className="text-slate-800">{formatDuration(call.durationSeconds)}</strong>
                             </span>
                             <span>Date: {formatDateTime(call.startedAt || call.createdAt)}</span>
                           </div>
 
                           {call.outcome && (
-                            <div className="text-xs text-muted-foreground">
-                              Outcome: <span className="text-foreground font-medium">{call.outcome}</span>
+                            <div className="text-xs text-slate-600 break-words">
+                              Outcome: <span className="text-slate-900 font-medium">{call.outcome}</span>
                             </div>
                           )}
 
                           {call.transcript && (
-                            <div className="rounded-md bg-muted/40 p-2.5 text-xs text-muted-foreground line-clamp-3">
-                              <span className="font-semibold text-foreground">Transcript: </span>
+                            <div className="rounded-lg bg-slate-50 p-2.5 text-xs text-slate-700 border border-slate-200/70 max-h-36 overflow-y-auto break-words leading-relaxed">
+                              <span className="font-semibold text-slate-900">Transcript: </span>
                               {call.transcript}
                             </div>
                           )}
@@ -822,44 +831,27 @@ export const ContactsView: React.FC = () => {
               </div>
             </div>
 
-            {/* Footer */}
-            <div
-              className="flex items-center justify-between border-t px-6 py-4"
-              style={{ backgroundColor: "#f8fafc", borderColor: "#e2e8f0" }}
-            >
+            {/* Dedicated Fixed Footer */}
+            <div className="shrink-0 z-10 flex items-center justify-between border-t border-slate-200 px-5 sm:px-6 py-3.5 bg-slate-50 gap-3 min-w-0">
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer hover:bg-red-50 transition-colors shadow-xs"
-                style={{
-                  backgroundColor: "#ffffff",
-                  color: "#dc2626",
-                  border: "1px solid #fca5a5",
-                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer bg-white text-red-600 border border-red-200 hover:bg-red-50 transition-colors shadow-xs shrink-0"
                 onClick={() => setArchivingContact(selectedContact)}
               >
-                <Archive className="h-4 w-4" style={{ color: "#dc2626" }} />
+                <Archive className="h-4 w-4 text-red-600" />
                 <span>Archive</span>
               </button>
-              <div className="flex gap-2.5">
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
-                  className="inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer hover:bg-slate-100 transition-colors shadow-xs"
-                  style={{
-                    backgroundColor: "#ffffff",
-                    color: "#0f172a",
-                    border: "1px solid #cbd5e1",
-                  }}
+                  className="inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer bg-white text-slate-800 border border-slate-300 hover:bg-slate-100 transition-colors shadow-xs"
                   onClick={() => setSelectedContact(null)}
                 >
                   Close
                 </button>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
-                  style={{
-                    backgroundColor: "#4f46e5",
-                    color: "#ffffff",
-                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white cursor-pointer bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-xs"
                   onClick={() => {
                     beginEdit(selectedContact);
                   }}

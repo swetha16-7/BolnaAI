@@ -643,31 +643,31 @@ export const FollowUpsView: React.FC = () => {
       {/* 5. Follow-Up Details Modal Dialog */}
       {selectedMessage && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-5 overflow-y-auto"
           role="presentation"
           onClick={() => setSelectedMessage(null)}
         >
           <div
-            className="w-full max-w-xl rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150"
+            className="w-full max-w-[660px] rounded-2xl border border-[#E2E8F0] bg-white shadow-2xl overflow-hidden max-h-[calc(100dvh-32px)] sm:max-h-[88vh] flex flex-col my-auto relative animate-in fade-in zoom-in-95 duration-150"
             role="dialog"
             aria-modal="true"
             aria-labelledby="followup-details-title"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-[#F1F5F9]">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-[#F1EDFF] border border-[#DDD6FE]/70 flex items-center justify-center text-[#6D28D9]">
+            <div className="shrink-0 flex items-center justify-between px-5 sm:px-6 py-4 border-b border-[#F1F5F9] bg-[#FAF9FF] gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-10 w-10 rounded-xl bg-[#F1EDFF] border border-[#DDD6FE]/70 flex items-center justify-center text-[#6D28D9] shrink-0 shadow-xs">
                   <MessageSquareText className="h-5 w-5 text-[#6D28D9]" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h2
                     id="followup-details-title"
-                    className="text-[18px] font-bold text-[#111827] leading-tight"
+                    className="text-base sm:text-lg font-bold text-[#111827] leading-tight truncate"
                   >
                     Follow-Up Details
                   </h2>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
                     Recorded {formatReceivedDate(selectedMessage.createdAt)}
                   </p>
                 </div>
@@ -676,30 +676,30 @@ export const FollowUpsView: React.FC = () => {
                 type="button"
                 aria-label="Close"
                 onClick={() => setSelectedMessage(null)}
-                className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
+                className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer shrink-0"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Modal Content */}
-            <div className="py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:px-6 py-5 space-y-4 min-w-0">
               {/* Customer Info Card */}
-              <div className="bg-[#FAF9FF] rounded-xl p-4 border border-[#DDD6FE]/60">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
+              <div className="bg-[#FAF9FF] rounded-xl p-4 border border-[#DDD6FE]/60 space-y-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div
-                      className={`h-11 w-11 rounded-xl ${getAvatarPastel(selectedMessage.callerName).bg} ${getAvatarPastel(selectedMessage.callerName).text} flex items-center justify-center font-bold text-base shadow-2xs`}
+                      className={`h-11 w-11 rounded-xl ${getAvatarPastel(selectedMessage.callerName).bg} ${getAvatarPastel(selectedMessage.callerName).text} flex items-center justify-center font-bold text-base shadow-xs shrink-0`}
                     >
                       {getInitials(selectedMessage.callerName)}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 text-[16px]">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900 text-base truncate">
                           {selectedMessage.callerName}
                         </span>
                         {selectedMessage.isDnc && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
                             Do Not Call
                           </span>
                         )}
@@ -707,19 +707,21 @@ export const FollowUpsView: React.FC = () => {
                       <p className="text-xs text-slate-500">Caller</p>
                     </div>
                   </div>
-                  <FollowUpStatusPill status={selectedMessage.status} />
+                  <div className="shrink-0">
+                    <FollowUpStatusPill status={selectedMessage.status} />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-[#DDD6FE]/40 text-xs">
-                  <div className="flex items-center gap-2 text-slate-700">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-3 border-t border-[#DDD6FE]/40 text-xs">
+                  <div className="flex items-center gap-2 text-slate-700 min-w-0">
                     <Phone className="h-4 w-4 text-[#6D28D9] shrink-0" />
-                    <span className="font-medium">
+                    <span className="font-medium break-all">
                       {selectedMessage.phoneNumber || "No phone provided"}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-700">
+                  <div className="flex items-center gap-2 text-slate-700 min-w-0">
                     <Mail className="h-4 w-4 text-[#6D28D9] shrink-0" />
-                    <span className="truncate">
+                    <span className="break-all [overflow-wrap:anywhere]">
                       {selectedMessage.email || "No email provided"}
                     </span>
                   </div>
@@ -728,10 +730,10 @@ export const FollowUpsView: React.FC = () => {
 
               {/* Message Enquiry Box */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#1E1B4B] uppercase tracking-wider">
+                <label className="text-[11px] font-bold text-[#1E1B4B] uppercase tracking-wider block">
                   Caller Message / Enquiry
                 </label>
-                <div className="p-3.5 bg-white border border-[#E2E8F0] rounded-xl text-sm text-slate-800 whitespace-pre-wrap leading-relaxed shadow-2xs">
+                <div className="p-4 bg-white border border-[#E2E8F0] rounded-xl text-sm text-slate-800 whitespace-pre-wrap break-words leading-relaxed shadow-xs">
                   {selectedMessage.message || "No message body provided."}
                 </div>
               </div>
@@ -739,10 +741,10 @@ export const FollowUpsView: React.FC = () => {
               {/* Reason / Category if available */}
               {selectedMessage.reason && (
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#1E1B4B] uppercase tracking-wider">
+                  <label className="text-[11px] font-bold text-[#1E1B4B] uppercase tracking-wider block">
                     Enquiry Reason / Topic
                   </label>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-[13px] text-slate-800 break-words">
                     {selectedMessage.reason}
                   </div>
                 </div>
@@ -751,20 +753,20 @@ export const FollowUpsView: React.FC = () => {
               {/* Technical / Call Metadata */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 {selectedMessage.callId && (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-0.5">
-                    <span className="text-[11px] font-semibold text-slate-500">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 min-w-0">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                       Retell Call ID
                     </span>
-                    <p className="font-mono text-slate-700 truncate" title={selectedMessage.callId}>
+                    <p className="font-mono text-slate-700 break-all" title={selectedMessage.callId}>
                       {selectedMessage.callId}
                     </p>
                   </div>
                 )}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-0.5">
-                  <span className="text-[11px] font-semibold text-slate-500">
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 min-w-0">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
                     Received Timestamp
                   </span>
-                  <p className="text-slate-700">
+                  <p className="text-slate-800 font-medium">
                     {formatReceivedDate(selectedMessage.createdAt)}
                   </p>
                 </div>
@@ -772,21 +774,21 @@ export const FollowUpsView: React.FC = () => {
 
               {/* Update Status Actions */}
               <div className="pt-2">
-                <label className="text-xs font-bold text-[#1E1B4B] uppercase tracking-wider block mb-2">
+                <label className="text-[11px] font-bold text-[#1E1B4B] uppercase tracking-wider block mb-2.5">
                   Update Follow-Up Status
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <button
                     type="button"
                     disabled={updatingId === selectedMessage.id}
                     onClick={() => void handleStatusChange(selectedMessage.id, "pending")}
-                    className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                    className={`py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer border shadow-xs ${
                       selectedMessage.status === "pending"
                         ? "bg-[#FEF3C7] text-[#92400E] border-[#FDE68A]"
-                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
                     }`}
                   >
-                    <Clock className="h-3.5 w-3.5" />
+                    <Clock className="h-3.5 w-3.5 shrink-0" />
                     <span>Pending</span>
                   </button>
 
@@ -794,13 +796,13 @@ export const FollowUpsView: React.FC = () => {
                     type="button"
                     disabled={updatingId === selectedMessage.id}
                     onClick={() => void handleStatusChange(selectedMessage.id, "handled")}
-                    className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                    className={`py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer border shadow-xs ${
                       selectedMessage.status === "handled"
                         ? "bg-[#EFF6FF] text-[#1D4ED8] border-[#BFDBFE]"
-                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
                     }`}
                   >
-                    <PhoneCall className="h-3.5 w-3.5" />
+                    <PhoneCall className="h-3.5 w-3.5 shrink-0" />
                     <span>Contacted</span>
                   </button>
 
@@ -808,13 +810,13 @@ export const FollowUpsView: React.FC = () => {
                     type="button"
                     disabled={updatingId === selectedMessage.id}
                     onClick={() => void handleStatusChange(selectedMessage.id, "archived")}
-                    className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                    className={`py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer border shadow-xs ${
                       selectedMessage.status === "archived"
                         ? "bg-[#DCFCE7] text-[#166534] border-[#86EFAC]"
-                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
                     }`}
                   >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                     <span>Completed</span>
                   </button>
                 </div>
@@ -822,11 +824,11 @@ export const FollowUpsView: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="pt-4 border-t border-[#F1F5F9] flex justify-end">
+            <div className="shrink-0 px-5 sm:px-6 py-3.5 border-t border-[#F1F5F9] bg-slate-50/80 flex justify-end">
               <button
                 type="button"
                 onClick={() => setSelectedMessage(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#E2E8F0] text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs"
+                className="px-5 py-2 rounded-xl text-xs sm:text-[13px] font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer shadow-xs transition-colors"
               >
                 Close
               </button>

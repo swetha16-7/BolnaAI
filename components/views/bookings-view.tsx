@@ -8,6 +8,7 @@ import {
   Calendar,
   Check,
   Clock,
+  Copy,
   X,
   Search,
   Filter,
@@ -122,6 +123,17 @@ export const BookingsView: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("");
   const [selectedBooking, setSelectedBooking] = useState<ApiAppointment | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = (text: string) => {
+    if (!text) return;
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopiedId(text);
+        window.setTimeout(() => setCopiedId((curr) => (curr === text ? null : curr)), 2000);
+      }).catch(() => {});
+    }
+  };
 
   useEffect(() => {
     void loadAppointments();
@@ -550,7 +562,7 @@ export const BookingsView: React.FC = () => {
       {/* 5. Booking Details Modal Dialog */}
       {selectedBooking && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-5 overflow-y-auto"
           role="presentation"
           onClick={() => setSelectedBooking(null)}
         >
@@ -593,20 +605,20 @@ export const BookingsView: React.FC = () => {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="booking-details-title"
-                className="w-full max-w-lg rounded-[20px] border border-[#E2E8F0] bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+                className="w-full max-w-[660px] rounded-[20px] border border-[#E2E8F0] bg-white shadow-2xl overflow-hidden max-h-[calc(100dvh-32px)] sm:max-h-[88vh] flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Modal Header */}
-                <div className="flex items-center justify-between border-b border-[#E2E8F0]/80 px-6 py-4 bg-[#F1EDFF]">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-[12px] bg-white border border-[#DDD6FE] flex items-center justify-center text-[#6D28D9] shadow-2xs">
+                <div className="shrink-0 flex items-center justify-between border-b border-[#E2E8F0]/80 px-5 sm:px-6 py-4 bg-[#F1EDFF] gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-10 w-10 rounded-[12px] bg-white border border-[#DDD6FE] flex items-center justify-center text-[#6D28D9] shadow-xs shrink-0">
                       <CalendarCheck className="h-5 w-5 text-[#6D28D9]" />
                     </div>
-                    <div>
-                      <h2 id="booking-details-title" className="text-base font-bold text-[#111827]">
+                    <div className="min-w-0">
+                      <h2 id="booking-details-title" className="text-base font-bold text-[#111827] truncate">
                         Booking Details
                       </h2>
-                      <p className="text-xs text-[#64748B]">
+                      <p className="text-xs text-[#64748B] truncate">
                         Cal.com appointment record
                       </p>
                     </div>
@@ -615,67 +627,67 @@ export const BookingsView: React.FC = () => {
                     type="button"
                     aria-label="Close"
                     onClick={() => setSelectedBooking(null)}
-                    className="rounded-lg p-1 text-[#64748B] hover:bg-white/80 hover:text-[#111827] transition-colors cursor-pointer"
+                    className="rounded-lg p-1.5 text-[#64748B] hover:bg-white/80 hover:text-[#111827] transition-colors cursor-pointer shrink-0"
                   >
                     <X className="h-5 w-5" />
                   </button>
                 </div>
 
                 {/* Modal Body */}
-                <div className="p-6 space-y-5 overflow-y-auto">
+                <div className="flex-1 min-h-0 p-5 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto min-w-0">
                   {/* Status Banner */}
-                  <div className="flex items-center justify-between p-3.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0]">
-                    <div className="text-xs font-semibold text-[#64748B]">Booking Status</div>
+                  <div className="flex items-center justify-between p-3.5 rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] gap-3">
+                    <div className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">Booking Status</div>
                     <BookingStatusPill status={selectedBooking.status} />
                   </div>
 
                   {/* Attendee Info */}
-                  <div className="space-y-2.5">
+                  <div className="space-y-2">
                     <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#94A3B8]">
                       Attendee Information
                     </h3>
-                    <div className="rounded-[14px] border border-[#E2E8F0] p-3.5 space-y-2.5 bg-white">
-                      <div className="flex items-center gap-2">
+                    <div className="rounded-[14px] border border-[#E2E8F0] p-3.5 space-y-2.5 bg-white shadow-xs">
+                      <div className="flex items-center gap-2 min-w-0">
                         <User className="h-4 w-4 text-[#6D28D9] shrink-0" />
-                        <span className="text-[14px] font-bold text-[#111827]">{customerName}</span>
+                        <span className="text-sm sm:text-[15px] font-bold text-[#111827] truncate">{customerName}</span>
                       </div>
                       {customerPhone && (
-                        <div className="flex items-center gap-2 text-xs text-[#334155]">
+                        <div className="flex items-center gap-2 text-xs text-[#334155] min-w-0">
                           <Phone className="h-3.5 w-3.5 text-[#6D28D9] shrink-0" />
-                          <span>{customerPhone}</span>
+                          <span className="break-all">{customerPhone}</span>
                         </div>
                       )}
                       {customerEmail && (
-                        <div className="flex items-center gap-2 text-xs text-[#334155]">
+                        <div className="flex items-center gap-2 text-xs text-[#334155] min-w-0">
                           <Mail className="h-3.5 w-3.5 text-[#6D28D9] shrink-0" />
-                          <span>{customerEmail}</span>
+                          <span className="break-all [overflow-wrap:anywhere]">{customerEmail}</span>
                         </div>
                       )}
                     </div>
                   </div>
 
                   {/* Schedule Details */}
-                  <div className="space-y-2.5">
+                  <div className="space-y-2">
                     <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#94A3B8]">
                       Appointment Schedule
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="rounded-[14px] border border-[#E2E8F0] p-3 bg-white space-y-1">
+                      <div className="rounded-[14px] border border-[#E2E8F0] p-3.5 bg-white space-y-1 shadow-xs">
                         <div className="flex items-center gap-1.5 text-xs text-[#64748B] font-medium">
-                          <Calendar className="h-3.5 w-3.5 text-[#6D28D9]" />
+                          <Calendar className="h-3.5 w-3.5 text-[#6D28D9] shrink-0" />
                           <span>Date</span>
                         </div>
-                        <div className="text-[14px] font-bold text-[#111827]">
+                        <div className="text-sm sm:text-[15px] font-bold text-[#111827]">
                           {formatBookingDate(selectedBooking.startsAt)}
                         </div>
                       </div>
 
-                      <div className="rounded-[14px] border border-[#E2E8F0] p-3 bg-white space-y-1">
+                      <div className="rounded-[14px] border border-[#E2E8F0] p-3.5 bg-white space-y-1 shadow-xs">
                         <div className="flex items-center gap-1.5 text-xs text-[#64748B] font-medium">
-                          <Clock className="h-3.5 w-3.5 text-[#6D28D9]" />
+                          <Clock className="h-3.5 w-3.5 text-[#6D28D9] shrink-0" />
                           <span>Time</span>
                         </div>
-                        <div className="text-[14px] font-bold text-[#111827]">
+                        <div className="text-sm sm:text-[15px] font-bold text-[#111827]">
                           {formatBookingTime(selectedBooking.startsAt, selectedBooking.timezone)}
                         </div>
                       </div>
@@ -683,33 +695,54 @@ export const BookingsView: React.FC = () => {
                   </div>
 
                   {/* Service & Property */}
-                  <div className="space-y-2.5">
+                  <div className="space-y-2">
                     <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#94A3B8]">
                       Service &amp; Property Details
                     </h3>
-                    <div className="rounded-[14px] border border-[#E2E8F0] p-3.5 space-y-2 bg-white text-xs">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-[#64748B]">Service:</span>
-                        <span className="font-semibold text-[#111827] text-right">{serviceName}</span>
+                    <div className="rounded-[14px] border border-[#E2E8F0] p-4 space-y-3 bg-white shadow-xs text-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-4">
+                        <span className="text-[#64748B] shrink-0 font-medium">Service:</span>
+                        <span className="font-semibold text-[#111827] text-left sm:text-right break-words min-w-0">
+                          {serviceName}
+                        </span>
                       </div>
+
                       {propertyLocation && (
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="text-[#64748B]">Property / Location:</span>
-                          <span className="font-medium text-[#111827] text-right">{propertyLocation}</span>
-                        </div>
-                      )}
-                      {calcomRef && (
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="text-[#64748B]">Cal.com Booking Reference:</span>
-                          <span className="font-mono font-medium text-[#6D28D9] bg-[#F1EDFF] px-2 py-0.5 rounded text-right">
-                            {calcomRef}
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-4 pt-2.5 border-t border-slate-100">
+                          <span className="text-[#64748B] shrink-0 font-medium">Property / Location:</span>
+                          <span className="font-medium text-[#111827] text-left sm:text-right break-words min-w-0">
+                            {propertyLocation}
                           </span>
                         </div>
                       )}
+
+                      {calcomRef && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-4 pt-2.5 border-t border-slate-100">
+                          <span className="text-[#64748B] shrink-0 font-medium">Cal.com Booking Reference:</span>
+                          <div className="flex items-center gap-1.5 self-start sm:self-auto min-w-0">
+                            <span className="font-mono font-medium text-[#6D28D9] bg-[#F1EDFF] px-2.5 py-1 rounded-md text-xs break-all">
+                              {calcomRef}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(calcomRef)}
+                              title="Copy Reference"
+                              className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                            >
+                              {copiedId === calcomRef ? (
+                                <Check className="h-3.5 w-3.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {selectedBooking.createdAt && (
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="text-[#64748B]">Recorded At:</span>
-                          <span className="text-[#334155] text-right">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-1 sm:gap-4 pt-2.5 border-t border-slate-100">
+                          <span className="text-[#64748B] shrink-0 font-medium">Recorded At:</span>
+                          <span className="text-[#334155] text-left sm:text-right">
                             {new Date(selectedBooking.createdAt).toLocaleString()}
                           </span>
                         </div>
@@ -720,24 +753,26 @@ export const BookingsView: React.FC = () => {
                   {/* Cancellation Details if cancelled */}
                   {(selectedBooking.status.toLowerCase() === "cancelled" ||
                     selectedBooking.status.toLowerCase() === "canceled") && (
-                    <div className="space-y-2.5">
+                    <div className="space-y-2">
                       <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#DC2626]">
                         Cancellation Details
                       </h3>
-                      <div className="rounded-[14px] border border-[#FECACA] p-3.5 space-y-2 bg-[#FFF8F8] text-xs">
+                      <div className="rounded-[14px] border border-[#FECACA] p-3.5 space-y-2 bg-[#FFF8F8] text-xs shadow-xs">
                         <div className="flex items-start justify-between gap-2">
                           <span className="text-[#991B1B] font-medium">Status:</span>
                           <span className="font-semibold text-[#DC2626] text-right">Cancelled</span>
                         </div>
                         {cancellationReason && (
                           <div className="flex items-start justify-between gap-2 pt-1.5 border-t border-[#FEE2E2]">
-                            <span className="text-[#991B1B]">Reason:</span>
-                            <span className="font-medium text-[#111827] text-right">{cancellationReason}</span>
+                            <span className="text-[#991B1B] shrink-0 font-medium">Reason:</span>
+                            <span className="font-medium text-[#111827] text-right break-words min-w-0">
+                              {cancellationReason}
+                            </span>
                           </div>
                         )}
                         {cancelledAt && (
                           <div className="flex items-start justify-between gap-2 pt-1.5 border-t border-[#FEE2E2]">
-                            <span className="text-[#991B1B]">Cancelled At:</span>
+                            <span className="text-[#991B1B] shrink-0 font-medium">Cancelled At:</span>
                             <span className="text-[#334155] text-right">
                               {new Date(cancelledAt).toLocaleString()}
                             </span>
@@ -753,7 +788,7 @@ export const BookingsView: React.FC = () => {
                       <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#94A3B8]">
                         Notes &amp; Details
                       </h3>
-                      <div className="rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] p-3 text-xs text-[#334155]">
+                      <div className="rounded-[12px] bg-[#F8FAFC] border border-[#E2E8F0] p-3.5 text-xs text-[#334155] whitespace-pre-wrap break-words leading-relaxed shadow-xs">
                         {notes}
                       </div>
                     </div>
@@ -761,14 +796,14 @@ export const BookingsView: React.FC = () => {
                 </div>
 
                 {/* Modal Footer */}
-                <div className="flex items-center justify-between border-t border-[#E2E8F0] px-6 py-3.5 bg-[#F8FAFC]">
+                <div className="shrink-0 flex items-center justify-between border-t border-[#E2E8F0] px-5 sm:px-6 py-3.5 bg-[#F8FAFC]">
                   <span className="text-xs text-[#64748B]">
                     Click anywhere outside to close
                   </span>
                   <button
                     type="button"
                     onClick={() => setSelectedBooking(null)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#E2E8F0] text-[#111827] hover:bg-slate-50 cursor-pointer shadow-2xs transition-colors"
+                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#E2E8F0] text-[#111827] hover:bg-slate-50 cursor-pointer shadow-xs transition-colors"
                   >
                     Close
                   </button>

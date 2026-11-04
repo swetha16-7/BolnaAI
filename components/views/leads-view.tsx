@@ -778,7 +778,7 @@ export const LeadsView: React.FC = () => {
       {/* 5. Lead Details Modal */}
       {selectedLead && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-5 backdrop-blur-xs overflow-y-auto"
           role="presentation"
           onClick={() => setSelectedLead(null)}
         >
@@ -786,24 +786,24 @@ export const LeadsView: React.FC = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="lead-details-title"
-            className="w-full max-w-2xl rounded-2xl border border-[#E2E8F0] bg-white p-6 sm:p-7 shadow-2xl overflow-y-auto max-h-[90vh]"
+            className="w-full max-w-[680px] rounded-2xl border border-[#E2E8F0] bg-white shadow-2xl overflow-hidden max-h-[calc(100dvh-32px)] sm:max-h-[88vh] flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-[#E2E8F0]">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-[#F1EDFF] border border-[#DDD6FE] text-[#6D28D9] font-bold text-[16px] flex items-center justify-center shrink-0">
+            <div className="shrink-0 flex items-center justify-between px-5 sm:px-6 py-4 border-b border-[#E2E8F0] bg-slate-50/70 gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-11 w-11 rounded-full bg-[#F1EDFF] border border-[#DDD6FE] text-[#6D28D9] font-bold text-base flex items-center justify-center shrink-0 shadow-xs">
                   {getInitials(selectedLead.firstName, selectedLead.lastName)}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2 id="lead-details-title" className="text-[20px] font-bold text-[#111827]">
+                    <h2 id="lead-details-title" className="text-lg sm:text-xl font-bold text-[#111827] truncate">
                       {`${selectedLead.firstName || ""} ${selectedLead.lastName || ""}`.trim() || "Unnamed Lead"}
                     </h2>
-                    {renderStatusBadge(selectedLead.status)}
+                    <div className="shrink-0">{renderStatusBadge(selectedLead.status)}</div>
                   </div>
-                  <p className="text-[13px] text-[#64748B] mt-0.5">
-                    Lead ID: <span className="font-mono text-slate-700">{selectedLead.id.slice(0, 13)}...</span>
+                  <p className="text-xs text-[#64748B] mt-0.5 truncate">
+                    Lead ID: <span className="font-mono text-slate-700">{selectedLead.id}</span>
                   </p>
                 </div>
               </div>
@@ -811,51 +811,51 @@ export const LeadsView: React.FC = () => {
                 type="button"
                 aria-label="Close"
                 onClick={() => setSelectedLead(null)}
-                className="h-9 w-9 rounded-lg border border-[#E2E8F0] text-[#64748B] hover:text-[#111827] hover:bg-slate-100 flex items-center justify-center transition-all cursor-pointer"
+                className="h-9 w-9 rounded-lg border border-[#E2E8F0] text-[#64748B] hover:text-[#111827] hover:bg-slate-100 flex items-center justify-center transition-all cursor-pointer shrink-0"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="py-5 space-y-5">
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-4 sm:space-y-5 min-w-0">
               {/* Key Contact Information Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                  <span className="text-[12px] font-semibold text-[#64748B] uppercase tracking-wider block">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 min-w-0">
+                  <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
                     Phone Number
                   </span>
-                  <p className="text-[15px] font-medium text-[#111827] mt-1 flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-[#6D28D9]" />
-                    {selectedLead.phone || "No phone recorded"}
+                  <p className="text-sm sm:text-[15px] font-medium text-[#111827] mt-1 flex items-center gap-2 break-all min-w-0">
+                    <Phone className="h-4 w-4 text-[#6D28D9] shrink-0" />
+                    <span>{selectedLead.phone || "No phone recorded"}</span>
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                  <span className="text-[12px] font-semibold text-[#64748B] uppercase tracking-wider block">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 min-w-0">
+                  <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
                     Email Address
                   </span>
-                  <p className="text-[15px] font-medium text-[#111827] mt-1 flex items-center gap-2 truncate">
-                    <Mail className="h-4 w-4 text-[#6D28D9]" />
-                    {selectedLead.email || "No email recorded"}
+                  <p className="text-sm sm:text-[15px] font-medium text-[#111827] mt-1 flex items-center gap-2 break-all min-w-0 [overflow-wrap:anywhere]">
+                    <Mail className="h-4 w-4 text-[#6D28D9] shrink-0" />
+                    <span>{selectedLead.email || "No email recorded"}</span>
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                  <span className="text-[12px] font-semibold text-[#64748B] uppercase tracking-wider block">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 min-w-0">
+                  <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
                     Property / Requirement
                   </span>
-                  <p className="text-[15px] font-medium text-[#111827] mt-1 flex items-center gap-2">
-                    <Building className="h-4 w-4 text-[#6D28D9]" />
-                    {selectedLead.company || "General Property Interest"}
+                  <p className="text-sm sm:text-[15px] font-medium text-[#111827] mt-1 flex items-center gap-2 break-words min-w-0">
+                    <Building className="h-4 w-4 text-[#6D28D9] shrink-0" />
+                    <span>{selectedLead.company || "General Property Interest"}</span>
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                  <span className="text-[12px] font-semibold text-[#64748B] uppercase tracking-wider block">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 min-w-0">
+                  <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
                     Lead Source
                   </span>
-                  <p className="text-[15px] font-medium text-[#111827] mt-1">
+                  <p className="text-sm sm:text-[15px] font-medium text-[#111827] mt-1 break-words">
                     {selectedLead.source || "Website Form"}
                   </p>
                 </div>
@@ -863,37 +863,40 @@ export const LeadsView: React.FC = () => {
 
               {/* Status Quick Updater */}
               <div className="p-4 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
-                <span className="text-[12px] font-bold text-[#475569] uppercase tracking-wider block mb-2">
+                <span className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block mb-2.5">
                   Update Lead Pipeline Status
                 </span>
                 <div className="flex flex-wrap gap-2">
-                  {(["new", "contacted", "qualified", "converted", "inactive"] as const).map((st) => (
-                    <button
-                      key={st}
-                      type="button"
-                      onClick={() => void handleStatusUpdate(selectedLead, st)}
-                      className={`px-3 py-1.5 rounded-lg text-[13px] font-semibold transition-all cursor-pointer ${
-                        (selectedLead.status || "").toLowerCase() === st
-                          ? "bg-[#6D28D9] text-white shadow-2xs"
-                          : "bg-white text-[#475569] border border-[#CBD5E1] hover:bg-slate-100"
-                      }`}
-                    >
-                      {st.charAt(0).toUpperCase() + st.slice(1)}
-                    </button>
-                  ))}
+                  {(["new", "contacted", "qualified", "converted", "inactive"] as const).map((st) => {
+                    const isActive = (selectedLead.status || "").toLowerCase() === st;
+                    return (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => void handleStatusUpdate(selectedLead, st)}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-[13px] font-semibold transition-all cursor-pointer border ${
+                          isActive
+                            ? "bg-[#6D28D9] text-white border-[#5B21B6] shadow-xs"
+                            : "bg-white text-[#475569] border-[#CBD5E1] hover:bg-slate-100 hover:text-slate-900 shadow-xs"
+                        }`}
+                      >
+                        {st.charAt(0).toUpperCase() + st.slice(1)}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Voice Consent & Compliance Details */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="text-[12px] font-bold text-[#475569] uppercase tracking-wider block mb-2">
-                  AI Voice Call Consent & Compliance
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <span className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block">
+                  AI Voice Call Consent &amp; Compliance
                 </span>
-                <div className="space-y-2 text-[13px]">
-                  <div className="flex items-center justify-between">
+                <div className="space-y-2 text-xs sm:text-[13px]">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-[#64748B]">Consent Status:</span>
                     <span
-                      className={`font-semibold px-2.5 py-0.5 rounded-md ${
+                      className={`font-semibold px-2.5 py-0.5 rounded-md text-xs ${
                         hasActiveVoiceConsent(selectedLead)
                           ? "bg-[#DCFCE7] text-[#166534] border border-[#86EFAC]"
                           : "bg-red-50 text-red-700 border border-red-200"
@@ -907,7 +910,7 @@ export const LeadsView: React.FC = () => {
                     </span>
                   </div>
                   {selectedLead.voiceConsentSource && (
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="text-[#64748B]">Consent Method:</span>
                       <span className="font-medium text-[#111827] capitalize">
                         {selectedLead.voiceConsentSource.replace("_", " ")}
@@ -915,14 +918,14 @@ export const LeadsView: React.FC = () => {
                     </div>
                   )}
                   {selectedLead.voiceConsentEvidence && (
-                    <div className="pt-1 border-t border-slate-200">
-                      <span className="text-[#64748B] block text-[12px]">Evidence Record:</span>
-                      <p className="text-[#1E293B] italic mt-0.5 bg-white p-2 rounded border border-slate-200">
+                    <div className="pt-2 border-t border-slate-200/80">
+                      <span className="text-[#64748B] block text-[11px] font-medium">Evidence Record:</span>
+                      <p className="text-[#1E293B] italic mt-1 bg-white p-2.5 rounded-lg border border-slate-200 break-words text-xs">
                         {selectedLead.voiceConsentEvidence}
                       </p>
                     </div>
                   )}
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-slate-200/80">
                     <span className="text-[#64748B]">Date Created:</span>
                     <span className="font-medium text-[#111827]">{formatDate(selectedLead.createdAt)}</span>
                   </div>
@@ -931,8 +934,8 @@ export const LeadsView: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="pt-4 border-t border-[#E2E8F0] flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
+            <div className="shrink-0 px-5 sm:px-6 py-3.5 border-t border-[#E2E8F0] bg-slate-50/80 flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => {
@@ -940,7 +943,7 @@ export const LeadsView: React.FC = () => {
                     setSelectedLead(null);
                     beginEdit(toEdit);
                   }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#CBD5E1] bg-white text-[#111827] text-[14px] font-semibold hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
+                  className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl border border-[#CBD5E1] bg-white text-[#111827] text-xs sm:text-[13px] font-semibold hover:bg-slate-100 transition-all cursor-pointer shadow-xs"
                 >
                   <Pencil className="h-4 w-4 text-[#2563EB]" />
                   <span>Edit Details</span>
@@ -954,7 +957,7 @@ export const LeadsView: React.FC = () => {
                     setSelectedLead(null);
                     beginCall(toCall);
                   }}
-                  className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[14px] font-semibold transition-all shadow-2xs ${
+                  className={`inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-[13px] font-semibold transition-all shadow-xs ${
                     selectedLead.phone && hasActiveVoiceConsent(selectedLead) && callAgents.length > 0
                       ? "bg-[#DCFCE7] text-[#166534] border border-[#86EFAC] hover:bg-[#BBF7D0] cursor-pointer"
                       : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60"
@@ -968,7 +971,7 @@ export const LeadsView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSelectedLead(null)}
-                className="px-5 py-2.5 rounded-xl bg-slate-100 text-[#334155] text-[14px] font-semibold hover:bg-slate-200 transition-all cursor-pointer"
+                className="px-4 sm:px-5 py-2 rounded-xl bg-white border border-[#CBD5E1] text-[#334155] text-xs sm:text-[13px] font-semibold hover:bg-slate-100 transition-all cursor-pointer shadow-xs"
               >
                 Close
               </button>
