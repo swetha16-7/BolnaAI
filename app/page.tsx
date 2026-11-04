@@ -9,7 +9,6 @@ import {
   PhoneCall,
   History,
   BarChart3,
-  Layers,
   User,
   LogOut,
   Bell,
@@ -29,7 +28,6 @@ import { AgentsView } from "@/components/views/agents-view";
 import { AgentBuilderView } from "@/components/views/agent-builder-view";
 import { LiveCallsView } from "@/components/views/live-calls-view";
 import { CallHistoryView } from "@/components/views/call-history-view";
-import { CrmView } from "@/components/views/crm-view";
 import { ContactsView } from "@/components/views/contacts-view";
 import { BookingsView } from "@/components/views/bookings-view";
 import { FollowUpsView } from "@/components/views/follow-ups-view";
@@ -44,7 +42,6 @@ const routeConfig: Record<string, { breadcrumb: string; component: React.Compone
   "agents": { breadcrumb: "AI Agents", component: AgentsView },
   "agent-builder": { breadcrumb: "Agent Builder", component: AgentBuilderView },
   "live-calls": { breadcrumb: "Live Calls", component: LiveCallsView },
-  "crm": { breadcrumb: "CRM", component: CrmView },
   "contacts": { breadcrumb: "Contacts", component: ContactsView },
   "bookings": { breadcrumb: "Bookings", component: BookingsView },
   "follow-ups": { breadcrumb: "Follow-Ups", component: FollowUpsView },
@@ -96,7 +93,7 @@ export default function Home() {
         });
       }
 
-      if (routeName === "customers") {
+      if (routeName === "customers" || routeName === "crm") {
         window.location.hash = "#/dashboard";
         return;
       }
@@ -328,16 +325,6 @@ export default function Home() {
               >
                 <UserRoundSearch size={18} />
                 <span>Leads</span>
-              </a>
-            </li>
-            <li>
-              <a
-                href="#/crm"
-                className={`nav-item ${activeRoute === "crm" ? "active" : ""}`}
-                data-page="crm"
-              >
-                <Layers size={18} />
-                <span>CRM</span>
               </a>
             </li>
             <li>

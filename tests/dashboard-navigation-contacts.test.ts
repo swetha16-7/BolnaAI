@@ -373,23 +373,7 @@ test("10. Notification Preferences section is completely removed from ProfileVie
   );
 });
 
-test("11. Customers section is completely removed from CRM navigation and interface", () => {
-  const crmFile = fs.readFileSync(
-    path.join(process.cwd(), "components", "views", "crm-view.tsx"),
-    "utf-8",
-  );
-
-  assert.equal(
-    crmFile.includes('{ key: "customers", label: "Customers" }'),
-    false,
-    "Customers tab must not exist in crm-view.tsx tabs array",
-  );
-  assert.equal(
-    crmFile.includes('activeTab === "customers"'),
-    false,
-    "activeTab === 'customers' checks must not exist in crm-view.tsx",
-  );
-
+test("11. Customers section is completely removed from navigation and interface", () => {
   const pageFile = fs.readFileSync(
     path.join(process.cwd(), "app", "page.tsx"),
     "utf-8",
@@ -411,12 +395,53 @@ test("11. Customers section is completely removed from CRM navigation and interf
   );
 });
 
-test("12. Contacts page is preserved and CRM leads are separated into dedicated Leads module", () => {
+test("12. CRM page is completely removed from navigation, routes, and components", () => {
   const pageFile = fs.readFileSync(
     path.join(process.cwd(), "app", "page.tsx"),
     "utf-8",
   );
 
+  // CRM must not exist in sidebar
+  assert.equal(
+    pageFile.includes('href="#/crm"'),
+    false,
+    "CRM sidebar navigation link must not exist in app/page.tsx",
+  );
+  assert.equal(
+    pageFile.includes('data-page="crm"'),
+    false,
+    "CRM data-page='crm' must not exist in app/page.tsx",
+  );
+
+  // CRM must not exist in routeConfig
+  assert.equal(
+    pageFile.includes('"crm":'),
+    false,
+    "CRM route must not exist in routeConfig",
+  );
+
+  // CrmView must not be imported
+  assert.equal(
+    pageFile.includes("CrmView"),
+    false,
+    "CrmView must not be imported in app/page.tsx",
+  );
+
+  // #/crm must redirect to dashboard
+  assert.ok(
+    pageFile.includes('routeName === "crm"') && pageFile.includes('window.location.hash = "#/dashboard"'),
+    "Navigating to #/crm must redirect to dashboard",
+  );
+
+  // crm-view.tsx file must no longer exist
+  const crmFileExists = fs.existsSync(path.join(process.cwd(), "components", "views", "crm-view.tsx"));
+  assert.equal(
+    crmFileExists,
+    false,
+    "components/views/crm-view.tsx must be completely removed",
+  );
+
+  // Independent pages are preserved
   assert.ok(
     pageFile.includes('"contacts": { breadcrumb: "Contacts", component: ContactsView }'),
     "Contacts page must be preserved in routeConfig",
@@ -426,21 +451,13 @@ test("12. Contacts page is preserved and CRM leads are separated into dedicated 
     "Contacts link must remain in sidebar",
   );
   assert.ok(
-    pageFile.includes('href="#/crm"'),
-    "CRM link must remain in sidebar",
+    pageFile.includes('"leads": { breadcrumb: "Leads", component: LeadsView }'),
+    "Leads page must be preserved in routeConfig",
   );
-
-  const crmFile = fs.readFileSync(
-    path.join(process.cwd(), "components", "views", "crm-view.tsx"),
-    "utf-8",
+  assert.ok(
+    pageFile.includes('href="#/leads"'),
+    "Leads link must remain in sidebar",
   );
-
-  // Leads table and tab must no longer exist in CRM
-  assert.ok(!crmFile.includes('{ key: "leads", label: "Leads" }'), "Leads tab must be removed from CRM");
-  assert.ok(!crmFile.includes('<Table>'), "Embedded contacts table must be removed from CRM");
-  assert.ok(!crmFile.includes('{ key: "followups", label: "Follow-Ups" }'), "Follow-Ups must be removed from CRM tabs");
-  assert.ok(!crmFile.includes('{ key: "bookings", label: "Bookings" }'), "Bookings must be removed from CRM tabs");
-  assert.ok(crmFile.includes('href="#/leads"'), "CRM must link to dedicated Leads page");
 });
 
 test("13. Dedicated Bookings page is implemented with independent navigation, table columns, and details modal", () => {
@@ -530,13 +547,13 @@ test("14. Dedicated Follow-Ups page is implemented with independent navigation, 
     "MessageSquareText icon must be used for Follow-Ups navigation",
   );
 
-  // Verify Follow-Ups is placed directly below Bookings and above CRM in the sidebar
+  // Verify Follow-Ups is placed directly below Bookings and above Leads in the sidebar
   const bookingsIndex = pageFile.indexOf('href="#/bookings"');
   const followupsIndex = pageFile.indexOf('href="#/follow-ups"');
-  const crmIndex = pageFile.indexOf('href="#/crm"');
+  const leadsIndex = pageFile.indexOf('href="#/leads"');
   assert.ok(
-    bookingsIndex < followupsIndex && followupsIndex < crmIndex,
-    "Follow-Ups navigation item must be placed directly below Bookings and above CRM",
+    bookingsIndex < followupsIndex && followupsIndex < leadsIndex,
+    "Follow-Ups navigation item must be placed directly below Bookings and above Leads",
   );
 
   const followupsFilePath = path.join(process.cwd(), "components", "views", "follow-ups-view.tsx");
@@ -605,14 +622,14 @@ test("15. Dedicated Leads page is implemented with independent navigation, cente
     "UserRoundSearch icon must be used for Leads navigation",
   );
 
-  // Verify Leads is placed directly below Follow-Ups and above CRM in the sidebar
+  // Verify Leads is placed directly below Follow-Ups and above Analytics in the sidebar
   const bookingsIndex = pageFile.indexOf('href="#/bookings"');
   const followupsIndex = pageFile.indexOf('href="#/follow-ups"');
   const leadsIndex = pageFile.indexOf('href="#/leads"');
-  const crmIndex = pageFile.indexOf('href="#/crm"');
+  const analyticsIndex = pageFile.indexOf('href="#/analytics"');
   assert.ok(
-    bookingsIndex < followupsIndex && followupsIndex < leadsIndex && leadsIndex < crmIndex,
-    "Leads navigation item must be placed directly below Follow-Ups and above CRM",
+    bookingsIndex < followupsIndex && followupsIndex < leadsIndex && leadsIndex < analyticsIndex,
+    "Leads navigation item must be placed directly below Follow-Ups and above Analytics",
   );
 
   const leadsFilePath = path.join(process.cwd(), "components", "views", "leads-view.tsx");
