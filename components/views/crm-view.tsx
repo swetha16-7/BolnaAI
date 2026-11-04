@@ -19,7 +19,6 @@ import { Mail, Phone, PhoneCall, Plus, Search, Pencil, X, RefreshCw } from "luci
 
 const tabs = [
   { key: "leads", label: "Leads" },
-  { key: "bookings", label: "Bookings" },
   { key: "followups", label: "Follow-Ups" },
 ] as const;
 
@@ -69,10 +68,6 @@ export const CrmView: React.FC = () => {
     agents,
     createCall,
     showToast,
-    appointments,
-    appointmentsLoading,
-    appointmentsError,
-    loadAppointments,
     messages,
     messagesLoading,
     messagesError,
@@ -109,12 +104,10 @@ export const CrmView: React.FC = () => {
   }, [search, statusFilter, loadContacts]);
 
   useEffect(() => {
-    if (activeTab === "bookings") {
-      void loadAppointments();
-    } else if (activeTab === "followups") {
+    if (activeTab === "followups") {
       void loadMessages();
     }
-  }, [activeTab, loadAppointments, loadMessages]);
+  }, [activeTab, loadMessages]);
 
   const beginCreate = () => {
     setEditing(null);
@@ -231,10 +224,10 @@ export const CrmView: React.FC = () => {
   return (
     <div>
       <PageHeader
-        title="Leads & Appointments"
-        description="Manage organization contacts, appointments, and caller messages stored in your workspace"
+        title="Leads & Follow-Ups"
+        description="Manage organization contacts and caller messages stored in your workspace"
       >
-        {activeTab !== "bookings" && activeTab !== "followups" && (
+        {activeTab === "leads" && (
           <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" onClick={beginCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Add Contact
@@ -375,132 +368,6 @@ export const CrmView: React.FC = () => {
                     </TableCell>
                   </TableRow>
                 ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
-
-      {activeTab === "bookings" && (
-        <Card className="border-border/60">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6 py-4">
-            <div>
-              <h3 className="text-lg font-semibold">Appointments &amp; Bookings</h3>
-              <p className="text-xs text-muted-foreground">
-                Confirmed property viewings and client consultations scheduled via Cal.com
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void loadAppointments()}
-              disabled={appointmentsLoading}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${appointmentsLoading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          </div>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Service &amp; Location</TableHead>
-                  <TableHead>Date &amp; Time</TableHead>
-                  <TableHead>Reference (Cal.com)</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {appointmentsLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <RefreshCw className="h-6 w-6 animate-spin text-primary" />
-                        <span>Loading appointments...</span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : appointmentsError ? (
-                  <TableRow>
-                    <TableCell colSpan={5} role="alert" className="py-8 text-center text-destructive">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <span>{appointmentsError}</span>
-                        <Button variant="outline" size="sm" onClick={() => void loadAppointments()}>
-                          <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : appointments.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-12 text-center text-muted-foreground">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <p className="font-medium text-foreground">No appointments have been recorded yet.</p>
-                        <p className="max-w-md text-xs">
-                          Appointments booked by callers via Retell AI or scheduled through Cal.com will appear here automatically.
-                        </p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          onClick={() => void loadAppointments()}
-                          disabled={appointmentsLoading}
-                        >
-                          <RefreshCw className={`mr-1 h-3.5 w-3.5 ${appointmentsLoading ? "animate-spin" : ""}`} /> Check for new bookings
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : appointments.map((appointment) => {
-                  const meta = (appointment.metadata as Record<string, unknown> | null) ?? {};
-                  const customerName = appointment.contact
-                    ? `${appointment.contact.firstName} ${appointment.contact.lastName ?? ""}`.trim()
-                    : ((meta.customerName as string | undefined) || "Customer");
-                  const customerPhone = appointment.contact?.phone || (meta.phoneNumber as string | undefined) || null;
-                  const customerEmail = appointment.contact?.email || (meta.email as string | undefined) || null;
-                  const location = (meta.location as string | undefined) || (meta.propertyType as string | undefined);
-                  const calcomRef =
-                    appointment.calcomEventId ||
-                    (meta.calcomBookingUid as string | undefined) ||
-                    (meta.bookingUid as string | undefined);
-
-                  return (
-                    <TableRow key={appointment.id}>
-                      <TableCell>
-                        <div className="font-medium">{customerName}</div>
-                        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-                          {customerPhone && (
-                            <span className="flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
-                              {customerPhone}
-                            </span>
-                          )}
-                          {customerEmail && (
-                            <span className="flex items-center gap-1">
-                              <Mail className="h-3 w-3" />
-                              {customerEmail}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">{appointment.serviceName ?? "Property Viewing"}</div>
-                        {location && <div className="text-xs text-muted-foreground">📍 {location}</div>}
-                      </TableCell>
-                      <TableCell>
-                        <div>{new Date(appointment.startsAt).toLocaleString()}</div>
-                        {appointment.timezone && (
-                          <div className="text-xs text-muted-foreground">{appointment.timezone}</div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-mono text-xs">{calcomRef ?? "—"}</span>
-                      </TableCell>
-                      <TableCell><StatusBadge status={appointment.status} /></TableCell>
-                    </TableRow>
-                  );
-                })}
               </TableBody>
             </Table>
           </CardContent>

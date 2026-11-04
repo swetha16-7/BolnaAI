@@ -41,7 +41,7 @@ export const DashboardView = () => {
     { label: "Calls Today", value: metrics?.callsToday.toLocaleString() ?? "—", metric: "calls" as const },
     { label: "Active Agents", value: metrics?.activeAgents.toLocaleString() ?? "—", metric: "agents" as const },
     { label: "Contacts", value: metrics?.contacts.toLocaleString() ?? "—", metric: "crm" as const, href: "#/contacts" },
-    { label: "Appointments", value: metrics?.appointments.toLocaleString() ?? "—", metric: "crm" as const, href: "#/crm" },
+    { label: "Appointments", value: metrics?.appointments.toLocaleString() ?? "—", metric: "crm" as const, href: "#/bookings" },
     { label: "Average Call Duration", value: formatDuration(metrics?.averageDurationSeconds ?? null), metric: "duration" as const },
     { label: "Total Calls", value: metrics?.totalCalls.toLocaleString() ?? "—", metric: "calls" as const },
   ];

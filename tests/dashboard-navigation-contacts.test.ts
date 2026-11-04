@@ -411,7 +411,7 @@ test("11. Customers section is completely removed from CRM navigation and interf
   );
 });
 
-test("12. Contacts page and CRM Leads, Bookings, and Follow-Ups functionality are fully preserved", () => {
+test("12. Contacts page and CRM Leads and Follow-Ups functionality are fully preserved", () => {
   const pageFile = fs.readFileSync(
     path.join(process.cwd(), "app", "page.tsx"),
     "utf-8",
@@ -436,6 +436,69 @@ test("12. Contacts page and CRM Leads, Bookings, and Follow-Ups functionality ar
   );
 
   assert.ok(crmFile.includes('{ key: "leads", label: "Leads" }'), "Leads tab must exist in CRM");
-  assert.ok(crmFile.includes('{ key: "bookings", label: "Bookings" }'), "Bookings tab must exist in CRM");
   assert.ok(crmFile.includes('{ key: "followups", label: "Follow-Ups" }'), "Follow-Ups tab must exist in CRM");
+  assert.ok(!crmFile.includes('{ key: "bookings", label: "Bookings" }'), "Bookings must be removed from CRM tabs");
+});
+
+test("13. Dedicated Bookings page is implemented with independent navigation, table columns, and details modal", () => {
+  const pageFile = fs.readFileSync(
+    path.join(process.cwd(), "app", "page.tsx"),
+    "utf-8",
+  );
+
+  assert.ok(
+    pageFile.includes('"bookings": { breadcrumb: "Bookings", component: BookingsView }'),
+    "Bookings route must exist in routeConfig",
+  );
+  assert.ok(
+    pageFile.includes('href="#/bookings"'),
+    "Dedicated Bookings link must exist in sidebar",
+  );
+  assert.ok(
+    pageFile.includes("CalendarCheck"),
+    "CalendarCheck icon must be used for Bookings navigation",
+  );
+
+  const dashboardFile = fs.readFileSync(
+    path.join(process.cwd(), "components", "views", "dashboard-view.tsx"),
+    "utf-8",
+  );
+  assert.ok(
+    dashboardFile.includes('label: "Appointments"'),
+    "Dashboard must have Appointments KPI card",
+  );
+  assert.ok(
+    dashboardFile.includes('href: "#/bookings"'),
+    "Dashboard Appointments KPI card must link to #/bookings",
+  );
+
+  const bookingsFilePath = path.join(process.cwd(), "components", "views", "bookings-view.tsx");
+  assert.ok(fs.existsSync(bookingsFilePath), "BookingsView component file must exist");
+  const bookingsFile = fs.readFileSync(bookingsFilePath, "utf-8");
+
+  // Verify Heading & Description
+  assert.ok(bookingsFile.includes("Bookings"), "Heading must contain Bookings");
+  assert.ok(
+    bookingsFile.includes("Manage property viewings and consultation appointments."),
+    "Must have specified description",
+  );
+
+  // Verify Table Columns
+  assert.ok(bookingsFile.includes("Customer Name"), "Must have Customer Name column");
+  assert.ok(bookingsFile.includes("Phone Number"), "Must have Phone Number column");
+  assert.ok(bookingsFile.includes("Email"), "Must have Email column");
+  assert.ok(bookingsFile.includes("Property / Location"), "Must have Property / Location column");
+  assert.ok(bookingsFile.includes("Appointment Date"), "Must have Appointment Date column");
+  assert.ok(bookingsFile.includes("Appointment Time"), "Must have Appointment Time column");
+  assert.ok(bookingsFile.includes("Booking Status"), "Must have Booking Status column");
+  assert.ok(bookingsFile.includes("Cal.com Booking Reference"), "Must have Cal.com Booking Reference column");
+  assert.ok(bookingsFile.includes("Actions"), "Must have Actions column");
+
+  // Verify Controls & Actions
+  assert.ok(bookingsFile.includes("Search bookings"), "Must have search input");
+  assert.ok(bookingsFile.includes("Filter by booking status"), "Must have status filter");
+  assert.ok(bookingsFile.includes("Filter by appointment date"), "Must have date filter");
+  assert.ok(bookingsFile.includes("Refresh"), "Must have refresh button");
+  assert.ok(bookingsFile.includes("View Details"), "Must have View Details action");
+  assert.ok(bookingsFile.includes("Booking Details"), "Must have booking details dialog");
 });

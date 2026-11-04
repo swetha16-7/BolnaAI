@@ -18,6 +18,7 @@ import {
   CheckCircle,
   XCircle,
   Contact,
+  CalendarCheck,
 } from "lucide-react";
 
 // Views
@@ -28,6 +29,7 @@ import { LiveCallsView } from "@/components/views/live-calls-view";
 import { CallHistoryView } from "@/components/views/call-history-view";
 import { CrmView } from "@/components/views/crm-view";
 import { ContactsView } from "@/components/views/contacts-view";
+import { BookingsView } from "@/components/views/bookings-view";
 import { AnalyticsView } from "@/components/views/analytics-view";
 import { ProfileView } from "@/components/views/profile-view";
 import { AuthView } from "@/components/auth/auth-view";
@@ -40,6 +42,7 @@ const routeConfig: Record<string, { breadcrumb: string; component: React.Compone
   "live-calls": { breadcrumb: "Live Calls", component: LiveCallsView },
   "crm": { breadcrumb: "CRM", component: CrmView },
   "contacts": { breadcrumb: "Contacts", component: ContactsView },
+  "bookings": { breadcrumb: "Bookings", component: BookingsView },
   "call-history": { breadcrumb: "Call History", component: CallHistoryView },
   "analytics": { breadcrumb: "Analytics", component: AnalyticsView },
   "profile": { breadcrumb: "Admin Profile", component: ProfileView }
@@ -289,6 +292,16 @@ export default function Home() {
               >
                 <Contact size={18} />
                 <span>Contacts</span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="#/bookings"
+                className={`nav-item ${activeRoute === "bookings" ? "active" : ""}`}
+                data-page="bookings"
+              >
+                <CalendarCheck size={18} />
+                <span>Bookings</span>
               </a>
             </li>
             <li>
