@@ -227,7 +227,7 @@ export const FollowUpsView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5 sm:space-y-6 w-full pb-8">
+    <div className="space-y-5 sm:space-y-6 w-full max-w-full pb-8">
       {/* 1. Header — matches Bookings design */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="space-y-1">
@@ -376,30 +376,30 @@ export const FollowUpsView: React.FC = () => {
       </div>
 
       {/* 4. Follow-Ups Table Card — exact 7 columns & lavender header */}
-      <div className="rounded-[16px] bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse table-auto">
+      <div className="rounded-[16px] bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden w-full max-w-full">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full min-w-[1300px] text-left border-collapse table-auto">
             <thead>
-              <tr className="bg-[#F1EDFF] border-b border-[#DDD6FE]/60 h-[46px]">
-                <th className="py-3.5 px-5 min-w-[170px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+              <tr className="bg-[#F1EDFF] border-b border-[#DDD6FE]/60 h-[48px]">
+                <th className="py-3.5 px-4 min-w-[165px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   CUSTOMER NAME
                 </th>
-                <th className="py-3.5 px-5 min-w-[170px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-4 min-w-[170px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   PHONE NUMBER
                 </th>
-                <th className="py-3.5 px-5 min-w-[210px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-4 min-w-[210px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   EMAIL
                 </th>
-                <th className="py-3.5 px-5 min-w-[260px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-4 min-w-[290px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   MESSAGE / ENQUIRY
                 </th>
-                <th className="py-3.5 px-5 min-w-[180px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-4 min-w-[190px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   DATE RECEIVED
                 </th>
-                <th className="py-3.5 px-5 min-w-[150px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-4 min-w-[155px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   FOLLOW-UP STATUS
                 </th>
-                <th className="py-3.5 px-5 min-w-[150px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none text-right">
+                <th className="py-3.5 px-4 min-w-[220px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none pr-6">
                   ACTIONS
                 </th>
               </tr>
@@ -486,13 +486,13 @@ export const FollowUpsView: React.FC = () => {
                       key={msg.id}
                       onClick={() => setSelectedMessage(msg)}
                       title="Click to view full message and follow-up details"
-                      className="h-[56px] min-h-[56px] hover:bg-[#FAF9FF] transition-colors cursor-pointer group"
+                      className="h-[64px] min-h-[64px] hover:bg-[#FAF9FF] transition-colors cursor-pointer group"
                     >
                       {/* 1. CUSTOMER NAME */}
-                      <td className="py-3 px-5 whitespace-nowrap">
+                      <td className="py-3.5 px-4 min-w-[165px] align-middle whitespace-nowrap">
                         <div className="flex items-center gap-3">
                           <div
-                            className={`h-[34px] w-[34px] rounded-[10px] ${avatar.bg} ${avatar.text} flex items-center justify-center font-bold text-[13px] shrink-0 shadow-2xs`}
+                            className={`h-[36px] w-[36px] rounded-[10px] ${avatar.bg} ${avatar.text} flex items-center justify-center font-bold text-[13px] shrink-0 shadow-2xs`}
                           >
                             {initial}
                           </div>
@@ -510,7 +510,7 @@ export const FollowUpsView: React.FC = () => {
                       </td>
 
                       {/* 2. PHONE NUMBER */}
-                      <td className="py-3 px-5 text-[#1E293B] whitespace-nowrap font-medium text-[14px]">
+                      <td className="py-3.5 px-4 min-w-[170px] align-middle text-[#1E293B] whitespace-nowrap font-medium text-[14px]">
                         {msg.phoneNumber ? (
                           <span className="inline-flex items-center gap-2">
                             <Phone className="h-[15px] w-[15px] text-[#6D28D9] shrink-0" />
@@ -522,11 +522,11 @@ export const FollowUpsView: React.FC = () => {
                       </td>
 
                       {/* 3. EMAIL */}
-                      <td className="py-3 px-5 text-[#1E293B] whitespace-nowrap text-[14px]">
+                      <td className="py-3.5 px-4 min-w-[210px] align-middle text-[#1E293B] whitespace-nowrap text-[14px]">
                         {msg.email ? (
                           <span className="inline-flex items-center gap-2" title={msg.email}>
                             <Mail className="h-[15px] w-[15px] text-[#6D28D9] shrink-0" />
-                            <span className="truncate max-w-[210px]">{msg.email}</span>
+                            <span className="truncate max-w-[190px]">{msg.email}</span>
                           </span>
                         ) : (
                           <span className="text-slate-400">—</span>
@@ -534,28 +534,31 @@ export const FollowUpsView: React.FC = () => {
                       </td>
 
                       {/* 4. MESSAGE / ENQUIRY */}
-                      <td className="py-3 px-5 text-[#1E293B] text-[14px]">
-                        <div className="flex flex-col gap-0.5 max-w-[280px]">
-                          <span
-                            className="truncate text-[#111827] font-normal"
-                            title={msg.message}
-                          >
-                            {msg.message}
-                          </span>
-                          {msg.reason && (
-                            <span
-                              className="text-[11px] text-[#64748B] truncate"
-                              title={`Reason: ${msg.reason}`}
+                      <td className="py-3.5 px-4 min-w-[290px] max-w-[340px] align-middle text-[#1E293B]">
+                        <div className="flex items-start gap-2.5">
+                          <MessageSquareText className="h-4 w-4 text-[#6D28D9] shrink-0 mt-0.5" />
+                          <div className="flex flex-col gap-1 min-w-0 flex-1">
+                            <p
+                              className="text-[13px] sm:text-[14px] font-normal text-[#111827] leading-snug line-clamp-2 break-words"
+                              title={msg.message}
                             >
-                              <span className="font-semibold text-[#475569]">Reason:</span>{" "}
-                              {msg.reason}
-                            </span>
-                          )}
+                              {msg.message || "—"}
+                            </p>
+                            {msg.reason && (
+                              <span
+                                className="text-[11px] sm:text-[12px] text-[#64748B] truncate"
+                                title={`Reason: ${msg.reason}`}
+                              >
+                                <span className="font-semibold text-[#475569]">Reason:</span>{" "}
+                                {msg.reason}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
 
                       {/* 5. DATE RECEIVED */}
-                      <td className="py-3 px-5 text-[#1E293B] whitespace-nowrap text-[14px]">
+                      <td className="py-3.5 px-4 min-w-[190px] align-middle text-[#1E293B] whitespace-nowrap text-[14px]">
                         <span className="inline-flex items-center gap-2">
                           <Calendar className="h-[15px] w-[15px] text-[#6D28D9] shrink-0" />
                           <span>{formatReceivedDate(msg.createdAt)}</span>
@@ -563,23 +566,29 @@ export const FollowUpsView: React.FC = () => {
                       </td>
 
                       {/* 6. FOLLOW-UP STATUS */}
-                      <td className="py-3 px-5 whitespace-nowrap">
+                      <td className="py-3.5 px-4 min-w-[155px] align-middle whitespace-nowrap">
                         <FollowUpStatusPill status={msg.status} />
                       </td>
 
                       {/* 7. ACTIONS */}
-                      <td className="py-3 px-5 whitespace-nowrap text-right">
+                      <td className="py-3.5 px-4 min-w-[220px] align-middle whitespace-nowrap pr-6">
                         <div
-                          className="inline-flex items-center gap-2"
+                          className="flex items-center gap-2 whitespace-nowrap"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            whiteSpace: "nowrap",
+                          }}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <button
                             type="button"
                             onClick={() => setSelectedMessage(msg)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium bg-slate-50 text-slate-700 hover:bg-[#F1EDFF] hover:text-[#6D28D9] border border-slate-200 transition-colors shadow-2xs"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-slate-50 text-slate-700 hover:bg-[#F1EDFF] hover:text-[#6D28D9] border border-slate-200 transition-colors shadow-2xs shrink-0 cursor-pointer"
                             title="View full details"
                           >
-                            <Eye className="h-3.5 w-3.5" />
+                            <Eye className="h-3.5 w-3.5 text-slate-500" />
                             <span>View</span>
                           </button>
 
@@ -588,7 +597,7 @@ export const FollowUpsView: React.FC = () => {
                               type="button"
                               disabled={updatingId === msg.id}
                               onClick={() => void handleStatusChange(msg.id, "handled")}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium bg-[#EFF6FF] text-[#1D4ED8] hover:bg-[#DBEAFE] border border-[#BFDBFE]/60 transition-colors shadow-2xs disabled:opacity-50"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-[#EFF6FF] text-[#1D4ED8] hover:bg-[#DBEAFE] border border-[#BFDBFE]/60 transition-colors shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
                               title="Mark as Contacted"
                             >
                               <PhoneCall className="h-3.5 w-3.5" />
@@ -599,10 +608,10 @@ export const FollowUpsView: React.FC = () => {
                               type="button"
                               disabled={updatingId === msg.id}
                               onClick={() => void handleStatusChange(msg.id, "archived")}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium bg-[#DCFCE7] text-[#166534] hover:bg-[#BBF7D0] border border-[#86EFAC]/60 transition-colors shadow-2xs disabled:opacity-50"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-[#DCFCE7] text-[#166534] hover:bg-[#BBF7D0] border border-[#86EFAC]/60 transition-colors shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
                               title="Mark as Completed"
                             >
-                              <Check className="h-3.5 w-3.5" />
+                              <Check className="h-3.5 w-3.5 stroke-[2.5]" />
                               <span>Complete</span>
                             </button>
                           ) : (
@@ -610,7 +619,7 @@ export const FollowUpsView: React.FC = () => {
                               type="button"
                               disabled={updatingId === msg.id}
                               onClick={() => void handleStatusChange(msg.id, "pending")}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors shadow-2xs disabled:opacity-50"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
                               title="Reopen follow-up"
                             >
                               <RotateCcw className="h-3.5 w-3.5" />

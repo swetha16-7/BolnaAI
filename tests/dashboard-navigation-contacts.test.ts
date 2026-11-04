@@ -557,7 +557,7 @@ test("14. Dedicated Follow-Ups page is implemented with independent navigation, 
     "Summary cards must have center-aligned content",
   );
 
-  // Verify Exact 7 Table Columns
+  // Verify Exact 7 Table Columns and Widths
   assert.ok(followupsFile.includes("CUSTOMER NAME"), "Must have CUSTOMER NAME column");
   assert.ok(followupsFile.includes("PHONE NUMBER"), "Must have PHONE NUMBER column");
   assert.ok(followupsFile.includes("EMAIL"), "Must have EMAIL column");
@@ -565,6 +565,13 @@ test("14. Dedicated Follow-Ups page is implemented with independent navigation, 
   assert.ok(followupsFile.includes("DATE RECEIVED"), "Must have DATE RECEIVED column");
   assert.ok(followupsFile.includes("FOLLOW-UP STATUS"), "Must have FOLLOW-UP STATUS column");
   assert.ok(followupsFile.includes("ACTIONS"), "Must have ACTIONS column");
+  assert.ok(followupsFile.includes("min-w-[1300px]"), "Table must enforce minimum width of 1300px");
+  assert.ok(followupsFile.includes("min-w-[165px]"), "Customer Name column must have minimum width 165px");
+  assert.ok(followupsFile.includes("min-w-[290px]"), "Message column must have minimum width 290px");
+  assert.ok(followupsFile.includes("min-w-[190px]"), "Date Received column must have minimum width 190px");
+  assert.ok(followupsFile.includes("min-w-[155px]"), "Status column must have minimum width 155px");
+  assert.ok(followupsFile.includes("min-w-[220px]"), "Actions column must have minimum width 220px");
+  assert.ok(followupsFile.includes("overflow-x-auto"), "Table wrapper must have overflow-x-auto for container-only scrolling");
 
   // Verify Controls & Actions
   assert.ok(followupsFile.includes("Search follow-ups"), "Must have search input");
