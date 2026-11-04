@@ -483,22 +483,27 @@ test("13. Dedicated Bookings page is implemented with independent navigation, ta
     "Must have specified description",
   );
 
-  // Verify Table Columns
-  assert.ok(bookingsFile.includes("Customer Name"), "Must have Customer Name column");
-  assert.ok(bookingsFile.includes("Phone Number"), "Must have Phone Number column");
-  assert.ok(bookingsFile.includes("Email"), "Must have Email column");
-  assert.ok(bookingsFile.includes("Property / Location"), "Must have Property / Location column");
-  assert.ok(bookingsFile.includes("Appointment Date"), "Must have Appointment Date column");
-  assert.ok(bookingsFile.includes("Appointment Time"), "Must have Appointment Time column");
-  assert.ok(bookingsFile.includes("Booking Status"), "Must have Booking Status column");
-  assert.ok(bookingsFile.includes("Cal.com Booking Reference"), "Must have Cal.com Booking Reference column");
-  assert.ok(bookingsFile.includes("Actions"), "Must have Actions column");
+  // Verify 4 Statistics Cards
+  assert.ok(bookingsFile.includes("Total Bookings"), "Must have Total Bookings card");
+  assert.ok(bookingsFile.includes("Confirmed"), "Must have Confirmed card");
+  assert.ok(bookingsFile.includes("Pending"), "Must have Pending card");
+  assert.ok(bookingsFile.includes("Cancelled"), "Must have Cancelled card");
+
+  // Verify Exact 7 Table Columns
+  assert.ok(bookingsFile.includes("CUSTOMER NAME"), "Must have CUSTOMER NAME column");
+  assert.ok(bookingsFile.includes("PHONE NUMBER"), "Must have PHONE NUMBER column");
+  assert.ok(bookingsFile.includes("EMAIL"), "Must have EMAIL column");
+  assert.ok(bookingsFile.includes("PROPERTY / LOCATION"), "Must have PROPERTY / LOCATION column");
+  assert.ok(bookingsFile.includes("APPOINTMENT DATE"), "Must have APPOINTMENT DATE column");
+  assert.ok(bookingsFile.includes("APPOINTMENT TIME"), "Must have APPOINTMENT TIME column");
+  assert.ok(bookingsFile.includes("BOOKING STATUS"), "Must have BOOKING STATUS column");
 
   // Verify Controls & Actions
   assert.ok(bookingsFile.includes("Search bookings"), "Must have search input");
   assert.ok(bookingsFile.includes("Filter by booking status"), "Must have status filter");
   assert.ok(bookingsFile.includes("Filter by appointment date"), "Must have date filter");
+  assert.ok(bookingsFile.includes("Clear Filters"), "Must have Clear Filters button");
   assert.ok(bookingsFile.includes("Refresh"), "Must have refresh button");
-  assert.ok(bookingsFile.includes("View Details"), "Must have View Details action");
   assert.ok(bookingsFile.includes("Booking Details"), "Must have booking details dialog");
+  assert.ok(bookingsFile.includes("Cal.com Booking Reference"), "Must have Cal.com reference in booking details");
 });
