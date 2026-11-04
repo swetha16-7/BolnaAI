@@ -56,7 +56,7 @@ function getInitials(name: string): string {
   if (!clean || clean === "—" || clean === "Customer") return "C";
   const parts = clean.split(/\s+/);
   if (parts.length === 1) return parts[0].substring(0, 1);
-  return (parts[0][0] || "C");
+  return parts[0][0] || "C";
 }
 
 function getAvatarPastel(name: string): { bg: string; text: string } {
@@ -240,58 +240,50 @@ export const BookingsView: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Four Summary Cards */}
+      {/* 2. Four Summary Cards — fully center-aligned layout */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Card 1: Total Bookings */}
-        <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] min-h-[105px] flex items-center justify-between transition-all hover:border-[#6D28D9]/40">
-          <div className="space-y-1">
-            <p className="text-[13px] sm:text-[14px] font-semibold text-[#111827]">Total Bookings</p>
-            <p className="text-[28px] sm:text-[32px] font-bold text-[#111827] tracking-tight leading-none mt-2">
-              {stats.total}
-            </p>
-          </div>
-          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#F1EDFF] border border-[#DDD6FE]/60 flex items-center justify-center text-[#6D28D9] shadow-2xs shrink-0">
+        <div className="bg-[#FCFAFF] rounded-[16px] border border-[#E9D5FF] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] flex flex-col items-center justify-center text-center transition-all hover:border-[#6D28D9]/60">
+          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#F1EDFF] border border-[#DDD6FE]/70 flex items-center justify-center text-[#6D28D9] shadow-2xs mb-2.5 shrink-0">
             <Calendar className="h-5 w-5 text-[#6D28D9]" />
           </div>
+          <p className="text-[15px] font-semibold text-[#111827]">Total Bookings</p>
+          <p className="text-[30px] sm:text-[34px] font-bold text-[#111827] tracking-tight leading-none mt-1.5">
+            {stats.total}
+          </p>
         </div>
 
         {/* Card 2: Confirmed */}
-        <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] min-h-[105px] flex items-center justify-between transition-all hover:border-[#10B981]/40">
-          <div className="space-y-1">
-            <p className="text-[13px] sm:text-[14px] font-semibold text-[#111827]">Confirmed</p>
-            <p className="text-[28px] sm:text-[32px] font-bold text-[#111827] tracking-tight leading-none mt-2">
-              {stats.confirmed}
-            </p>
-          </div>
-          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#DCFCE7] border border-[#86EFAC]/40 flex items-center justify-center text-[#16A34A] shadow-2xs shrink-0">
+        <div className="bg-[#F7FDF9] rounded-[16px] border border-[#BBF7D0] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] flex flex-col items-center justify-center text-center transition-all hover:border-[#10B981]/60">
+          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#DCFCE7] border border-[#86EFAC]/50 flex items-center justify-center text-[#16A34A] shadow-2xs mb-2.5 shrink-0">
             <Check className="h-5 w-5 text-[#16A34A] stroke-[2.5]" />
           </div>
+          <p className="text-[15px] font-semibold text-[#111827]">Confirmed</p>
+          <p className="text-[30px] sm:text-[34px] font-bold text-[#111827] tracking-tight leading-none mt-1.5">
+            {stats.confirmed}
+          </p>
         </div>
 
         {/* Card 3: Pending */}
-        <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] min-h-[105px] flex items-center justify-between transition-all hover:border-[#F59E0B]/40">
-          <div className="space-y-1">
-            <p className="text-[13px] sm:text-[14px] font-semibold text-[#111827]">Pending</p>
-            <p className="text-[28px] sm:text-[32px] font-bold text-[#111827] tracking-tight leading-none mt-2">
-              {stats.pending}
-            </p>
-          </div>
-          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#FEF3C7] border border-[#FDE68A]/60 flex items-center justify-center text-[#D97706] shadow-2xs shrink-0">
+        <div className="bg-[#FFFDF5] rounded-[16px] border border-[#FDE68A] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] flex flex-col items-center justify-center text-center transition-all hover:border-[#F59E0B]/60">
+          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#FEF3C7] border border-[#FDE68A]/60 flex items-center justify-center text-[#D97706] shadow-2xs mb-2.5 shrink-0">
             <Clock className="h-5 w-5 text-[#D97706] stroke-[2.2]" />
           </div>
+          <p className="text-[15px] font-semibold text-[#111827]">Pending</p>
+          <p className="text-[30px] sm:text-[34px] font-bold text-[#111827] tracking-tight leading-none mt-1.5">
+            {stats.pending}
+          </p>
         </div>
 
         {/* Card 4: Cancelled */}
-        <div className="bg-white rounded-[16px] border border-[#E2E8F0] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] min-h-[105px] flex items-center justify-between transition-all hover:border-[#EF4444]/40">
-          <div className="space-y-1">
-            <p className="text-[13px] sm:text-[14px] font-semibold text-[#111827]">Cancelled</p>
-            <p className="text-[28px] sm:text-[32px] font-bold text-[#111827] tracking-tight leading-none mt-2">
-              {stats.cancelled}
-            </p>
-          </div>
-          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#FEE2E2] border border-[#FECACA]/60 flex items-center justify-center text-[#DC2626] shadow-2xs shrink-0">
+        <div className="bg-[#FFF8F8] rounded-[16px] border border-[#FECACA] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] flex flex-col items-center justify-center text-center transition-all hover:border-[#EF4444]/60">
+          <div className="h-[46px] w-[46px] rounded-[12px] bg-[#FEE2E2] border border-[#FECACA]/60 flex items-center justify-center text-[#DC2626] shadow-2xs mb-2.5 shrink-0">
             <X className="h-5 w-5 text-[#DC2626] stroke-[2.5]" />
           </div>
+          <p className="text-[15px] font-semibold text-[#111827]">Cancelled</p>
+          <p className="text-[30px] sm:text-[34px] font-bold text-[#111827] tracking-tight leading-none mt-1.5">
+            {stats.cancelled}
+          </p>
         </div>
       </div>
 
@@ -360,7 +352,7 @@ export const BookingsView: React.FC = () => {
                 <th className="py-3.5 px-5 min-w-[170px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   CUSTOMER NAME
                 </th>
-                <th className="py-3.5 px-5 min-w-[165px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-5 min-w-[170px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   PHONE NUMBER
                 </th>
                 <th className="py-3.5 px-5 min-w-[210px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
@@ -369,13 +361,13 @@ export const BookingsView: React.FC = () => {
                 <th className="py-3.5 px-5 min-w-[250px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   PROPERTY / LOCATION
                 </th>
-                <th className="py-3.5 px-5 min-w-[175px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-5 min-w-[180px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   APPOINTMENT DATE
                 </th>
-                <th className="py-3.5 px-5 min-w-[185px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-5 min-w-[190px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   APPOINTMENT TIME
                 </th>
-                <th className="py-3.5 px-5 min-w-[145px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-5 min-w-[150px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   BOOKING STATUS
                 </th>
               </tr>
