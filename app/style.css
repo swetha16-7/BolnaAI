@@ -537,6 +537,9 @@ button {
 /* Main Content and Topbar styling */
 .main-content {
   flex-grow: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: calc(100vw - var(--sidebar-width));
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -806,7 +809,11 @@ body.dark-theme .notification-item:hover {
 /* Page Viewport System */
 .page-viewport {
   flex-grow: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 2rem;
   position: relative;
 }

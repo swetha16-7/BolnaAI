@@ -263,9 +263,9 @@ export const FollowUpsView: React.FC = () => {
       </div>
 
       {/* 2. Four Summary Cards — fully center-aligned layout */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 w-full max-w-full">
         {/* Card 1: Total Follow-Ups */}
-        <div className="bg-[#FCFAFF] rounded-[16px] border border-[#E9D5FF] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] flex flex-col items-center justify-center text-center transition-all hover:border-[#6D28D9]/60">
+        <div className="bg-[#FCFAFF] rounded-[16px] border border-[#E9D5FF] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] min-w-0 flex flex-col items-center justify-center text-center transition-all hover:border-[#6D28D9]/60">
           <div className="h-[46px] w-[46px] rounded-[12px] bg-[#F1EDFF] border border-[#DDD6FE]/70 flex items-center justify-center text-[#6D28D9] shadow-2xs mb-2.5 shrink-0">
             <MessageSquareText className="h-5 w-5 text-[#6D28D9]" />
           </div>
@@ -276,7 +276,7 @@ export const FollowUpsView: React.FC = () => {
         </div>
 
         {/* Card 2: Pending */}
-        <div className="bg-[#FFFDF5] rounded-[16px] border border-[#FDE68A] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] flex flex-col items-center justify-center text-center transition-all hover:border-[#F59E0B]/60">
+        <div className="bg-[#FFFDF5] rounded-[16px] border border-[#FDE68A] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] min-w-0 flex flex-col items-center justify-center text-center transition-all hover:border-[#F59E0B]/60">
           <div className="h-[46px] w-[46px] rounded-[12px] bg-[#FEF3C7] border border-[#FDE68A]/60 flex items-center justify-center text-[#D97706] shadow-2xs mb-2.5 shrink-0">
             <Clock className="h-5 w-5 text-[#D97706] stroke-[2.2]" />
           </div>
@@ -287,7 +287,7 @@ export const FollowUpsView: React.FC = () => {
         </div>
 
         {/* Card 3: Contacted */}
-        <div className="bg-[#EFF6FF] rounded-[16px] border border-[#BFDBFE] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] flex flex-col items-center justify-center text-center transition-all hover:border-[#2563EB]/60">
+        <div className="bg-[#EFF6FF] rounded-[16px] border border-[#BFDBFE] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] min-w-0 flex flex-col items-center justify-center text-center transition-all hover:border-[#2563EB]/60">
           <div className="h-[46px] w-[46px] rounded-[12px] bg-[#DBEAFE] border border-[#BFDBFE]/70 flex items-center justify-center text-[#2563EB] shadow-2xs mb-2.5 shrink-0">
             <PhoneCall className="h-5 w-5 text-[#2563EB]" />
           </div>
@@ -298,7 +298,7 @@ export const FollowUpsView: React.FC = () => {
         </div>
 
         {/* Card 4: Completed */}
-        <div className="bg-[#F7FDF9] rounded-[16px] border border-[#BBF7D0] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] flex flex-col items-center justify-center text-center transition-all hover:border-[#10B981]/60">
+        <div className="bg-[#F7FDF9] rounded-[16px] border border-[#BBF7D0] p-5 sm:p-[20px] shadow-[0_1px_3px_rgba(0,0,0,0.03)] min-h-[148px] sm:min-h-[152px] min-w-0 flex flex-col items-center justify-center text-center transition-all hover:border-[#10B981]/60">
           <div className="h-[46px] w-[46px] rounded-[12px] bg-[#DCFCE7] border border-[#86EFAC]/50 flex items-center justify-center text-[#16A34A] shadow-2xs mb-2.5 shrink-0">
             <CheckCircle2 className="h-5 w-5 text-[#16A34A] stroke-[2.5]" />
           </div>
@@ -310,9 +310,9 @@ export const FollowUpsView: React.FC = () => {
       </div>
 
       {/* 3. Search and Filter Toolbar Container */}
-      <div className="bg-white rounded-[16px] border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[14px_18px] min-h-[76px] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 sm:gap-4">
+      <div className="bg-white rounded-[16px] border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-[14px_18px] min-h-[76px] flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3.5 sm:gap-4 w-full max-w-full">
         {/* Search Input (with absolute icon and proper 44px left padding) */}
-        <div className="relative flex-[42] min-w-[280px] flex items-center">
+        <div className="relative flex-1 min-w-[220px] flex items-center">
           <Search
             className="absolute left-4 top-1/2 -translate-y-1/2 h-[18px] w-[18px] text-[#94A3B8] pointer-events-none"
             style={{
@@ -335,71 +335,74 @@ export const FollowUpsView: React.FC = () => {
           />
         </div>
 
-        {/* Status Dropdown */}
-        <div className="relative flex-[15] min-w-[150px] max-w-full lg:max-w-[180px]">
-          <select
-            aria-label="Filter by follow-up status"
-            className="h-[48px] w-full rounded-[12px] pl-4 pr-10 text-[14px] font-medium text-[#334155] bg-white border border-[#E2E8F0] focus:outline-none focus:border-[#6D28D9] focus:ring-2 focus:ring-[#6D28D9]/15 transition-all cursor-pointer appearance-none"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">All Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="contacted">Contacted</option>
-            <option value="completed">Completed</option>
-          </select>
-          <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#94A3B8] pointer-events-none" />
-        </div>
+        {/* Toolbar Controls Right Side */}
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 shrink-0">
+          {/* Status Dropdown */}
+          <div className="relative w-full sm:w-[155px] shrink-0">
+            <select
+              aria-label="Filter by follow-up status"
+              className="h-[48px] w-full rounded-[12px] pl-4 pr-10 text-[14px] font-medium text-[#334155] bg-white border border-[#E2E8F0] focus:outline-none focus:border-[#6D28D9] focus:ring-2 focus:ring-[#6D28D9]/15 transition-all cursor-pointer appearance-none"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="contacted">Contacted</option>
+              <option value="completed">Completed</option>
+            </select>
+            <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#94A3B8] pointer-events-none" />
+          </div>
 
-        {/* Date Picker */}
-        <div className="relative flex-[17] min-w-[160px] max-w-full lg:max-w-[200px]">
-          <input
-            type="date"
-            aria-label="Filter by date received"
-            className="h-[48px] w-full rounded-[12px] px-3.5 text-[14px] font-medium text-[#334155] bg-white border border-[#E2E8F0] focus:outline-none focus:border-[#6D28D9] focus:ring-2 focus:ring-[#6D28D9]/15 transition-all cursor-pointer"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-          />
-        </div>
+          {/* Date Picker */}
+          <div className="relative w-full sm:w-[165px] shrink-0">
+            <input
+              type="date"
+              aria-label="Filter by date received"
+              className="h-[48px] w-full rounded-[12px] px-3.5 text-[14px] font-medium text-[#334155] bg-white border border-[#E2E8F0] focus:outline-none focus:border-[#6D28D9] focus:ring-2 focus:ring-[#6D28D9]/15 transition-all cursor-pointer"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+            />
+          </div>
 
-        {/* Clear Filters Button */}
-        <div className="flex items-center shrink-0">
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="h-[48px] px-5 w-full lg:w-auto rounded-[12px] text-[14px] font-semibold text-[#6D28D9] bg-white border border-[#DDD6FE] hover:border-[#6D28D9] hover:bg-[#F8F6FF] active:bg-[#F1EDFF] transition-all cursor-pointer flex items-center justify-center gap-2 shadow-2xs"
-          >
-            <Filter className="h-4 w-4 text-[#6D28D9]" />
-            <span>Clear Filters</span>
-          </button>
+          {/* Clear Filters Button */}
+          <div className="flex items-center shrink-0 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="h-[48px] px-4 w-full sm:w-auto rounded-[12px] text-[14px] font-semibold text-[#6D28D9] bg-white border border-[#DDD6FE] hover:border-[#6D28D9] hover:bg-[#F8F6FF] active:bg-[#F1EDFF] transition-all cursor-pointer flex items-center justify-center gap-2 shadow-2xs whitespace-nowrap"
+            >
+              <Filter className="h-4 w-4 text-[#6D28D9]" />
+              <span>Clear Filters</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* 4. Follow-Ups Table Card — exact 7 columns & lavender header */}
       <div className="rounded-[16px] bg-white border border-[#E2E8F0] shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden w-full max-w-full">
         <div className="overflow-x-auto w-full">
-          <table className="w-full min-w-[1300px] text-left border-collapse table-auto">
+          <table className="w-full text-left border-collapse min-w-[1040px] xl:min-w-[1080px] table-auto">
             <thead>
               <tr className="bg-[#F1EDFF] border-b border-[#DDD6FE]/60 h-[48px]">
-                <th className="py-3.5 px-4 min-w-[165px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-3.5 sm:px-4 min-w-[145px] xl:min-w-[155px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   CUSTOMER NAME
                 </th>
-                <th className="py-3.5 px-4 min-w-[170px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-3.5 sm:px-4 min-w-[145px] xl:min-w-[155px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   PHONE NUMBER
                 </th>
-                <th className="py-3.5 px-4 min-w-[210px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-3.5 sm:px-4 min-w-[170px] xl:min-w-[190px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   EMAIL
                 </th>
-                <th className="py-3.5 px-4 min-w-[290px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-3.5 sm:px-4 min-w-[210px] xl:min-w-[240px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   MESSAGE / ENQUIRY
                 </th>
-                <th className="py-3.5 px-4 min-w-[190px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-3.5 sm:px-4 min-w-[155px] xl:min-w-[170px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   DATE RECEIVED
                 </th>
-                <th className="py-3.5 px-4 min-w-[155px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
+                <th className="py-3.5 px-3.5 sm:px-4 min-w-[125px] xl:min-w-[135px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none">
                   FOLLOW-UP STATUS
                 </th>
-                <th className="py-3.5 px-4 min-w-[220px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none pr-6">
+                <th className="py-3.5 px-3.5 sm:px-4 min-w-[190px] xl:min-w-[205px] text-[12px] font-bold text-[#1E1B4B] uppercase tracking-wider select-none pr-5">
                   ACTIONS
                 </th>
               </tr>
@@ -489,19 +492,19 @@ export const FollowUpsView: React.FC = () => {
                       className="h-[64px] min-h-[64px] hover:bg-[#FAF9FF] transition-colors cursor-pointer group"
                     >
                       {/* 1. CUSTOMER NAME */}
-                      <td className="py-3.5 px-4 min-w-[165px] align-middle whitespace-nowrap">
-                        <div className="flex items-center gap-3">
+                      <td className="py-3.5 px-3.5 sm:px-4 min-w-[145px] xl:min-w-[155px] align-middle whitespace-nowrap">
+                        <div className="flex items-center gap-2.5">
                           <div
-                            className={`h-[36px] w-[36px] rounded-[10px] ${avatar.bg} ${avatar.text} flex items-center justify-center font-bold text-[13px] shrink-0 shadow-2xs`}
+                            className={`h-[34px] w-[34px] rounded-[10px] ${avatar.bg} ${avatar.text} flex items-center justify-center font-bold text-[13px] shrink-0 shadow-2xs`}
                           >
                             {initial}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-[14px] text-[#111827] group-hover:text-[#6D28D9] transition-colors">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-bold text-[13.5px] sm:text-[14px] text-[#111827] group-hover:text-[#6D28D9] transition-colors truncate max-w-[110px] sm:max-w-[130px]">
                               {customerName}
                             </span>
                             {msg.isDnc && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 shrink-0">
                                 DNC
                               </span>
                             )}
@@ -510,10 +513,10 @@ export const FollowUpsView: React.FC = () => {
                       </td>
 
                       {/* 2. PHONE NUMBER */}
-                      <td className="py-3.5 px-4 min-w-[170px] align-middle text-[#1E293B] whitespace-nowrap font-medium text-[14px]">
+                      <td className="py-3.5 px-3.5 sm:px-4 min-w-[145px] xl:min-w-[155px] align-middle text-[#1E293B] whitespace-nowrap font-medium text-[13px] sm:text-[14px]">
                         {msg.phoneNumber ? (
                           <span className="inline-flex items-center gap-2">
-                            <Phone className="h-[15px] w-[15px] text-[#6D28D9] shrink-0" />
+                            <Phone className="h-[14px] w-[14px] text-[#6D28D9] shrink-0" />
                             <span>{msg.phoneNumber}</span>
                           </span>
                         ) : (
@@ -522,11 +525,11 @@ export const FollowUpsView: React.FC = () => {
                       </td>
 
                       {/* 3. EMAIL */}
-                      <td className="py-3.5 px-4 min-w-[210px] align-middle text-[#1E293B] whitespace-nowrap text-[14px]">
+                      <td className="py-3.5 px-3.5 sm:px-4 min-w-[170px] xl:min-w-[190px] align-middle text-[#1E293B] whitespace-nowrap text-[13px] sm:text-[14px]">
                         {msg.email ? (
                           <span className="inline-flex items-center gap-2" title={msg.email}>
-                            <Mail className="h-[15px] w-[15px] text-[#6D28D9] shrink-0" />
-                            <span className="truncate max-w-[190px]">{msg.email}</span>
+                            <Mail className="h-[14px] w-[14px] text-[#6D28D9] shrink-0" />
+                            <span className="truncate max-w-[150px] sm:max-w-[170px]">{msg.email}</span>
                           </span>
                         ) : (
                           <span className="text-slate-400">—</span>
@@ -534,10 +537,10 @@ export const FollowUpsView: React.FC = () => {
                       </td>
 
                       {/* 4. MESSAGE / ENQUIRY */}
-                      <td className="py-3.5 px-4 min-w-[290px] max-w-[340px] align-middle text-[#1E293B]">
-                        <div className="flex items-start gap-2.5">
+                      <td className="py-3.5 px-3.5 sm:px-4 min-w-[210px] xl:min-w-[240px] align-middle text-[#1E293B]">
+                        <div className="flex items-start gap-2">
                           <MessageSquareText className="h-4 w-4 text-[#6D28D9] shrink-0 mt-0.5" />
-                          <div className="flex flex-col gap-1 min-w-0 flex-1">
+                          <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                             <p
                               className="text-[13px] sm:text-[14px] font-normal text-[#111827] leading-snug line-clamp-2 break-words"
                               title={msg.message}
@@ -558,20 +561,20 @@ export const FollowUpsView: React.FC = () => {
                       </td>
 
                       {/* 5. DATE RECEIVED */}
-                      <td className="py-3.5 px-4 min-w-[190px] align-middle text-[#1E293B] whitespace-nowrap text-[14px]">
+                      <td className="py-3.5 px-3.5 sm:px-4 min-w-[155px] xl:min-w-[170px] align-middle text-[#1E293B] whitespace-nowrap text-[13px] sm:text-[14px]">
                         <span className="inline-flex items-center gap-2">
-                          <Calendar className="h-[15px] w-[15px] text-[#6D28D9] shrink-0" />
+                          <Calendar className="h-[14px] w-[14px] text-[#6D28D9] shrink-0" />
                           <span>{formatReceivedDate(msg.createdAt)}</span>
                         </span>
                       </td>
 
                       {/* 6. FOLLOW-UP STATUS */}
-                      <td className="py-3.5 px-4 min-w-[155px] align-middle whitespace-nowrap">
+                      <td className="py-3.5 px-3.5 sm:px-4 min-w-[125px] xl:min-w-[135px] align-middle whitespace-nowrap">
                         <FollowUpStatusPill status={msg.status} />
                       </td>
 
                       {/* 7. ACTIONS */}
-                      <td className="py-3.5 px-4 min-w-[220px] align-middle whitespace-nowrap pr-6">
+                      <td className="py-3.5 px-3.5 sm:px-4 min-w-[190px] xl:min-w-[205px] align-middle whitespace-nowrap pr-5">
                         <div
                           className="flex items-center gap-2 whitespace-nowrap"
                           style={{
@@ -585,7 +588,7 @@ export const FollowUpsView: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setSelectedMessage(msg)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-slate-50 text-slate-700 hover:bg-[#F1EDFF] hover:text-[#6D28D9] border border-slate-200 transition-colors shadow-2xs shrink-0 cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-slate-50 text-slate-700 hover:bg-[#F1EDFF] hover:text-[#6D28D9] border border-slate-200 transition-colors shadow-2xs shrink-0 cursor-pointer"
                             title="View full details"
                           >
                             <Eye className="h-3.5 w-3.5 text-slate-500" />
@@ -597,7 +600,7 @@ export const FollowUpsView: React.FC = () => {
                               type="button"
                               disabled={updatingId === msg.id}
                               onClick={() => void handleStatusChange(msg.id, "handled")}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-[#EFF6FF] text-[#1D4ED8] hover:bg-[#DBEAFE] border border-[#BFDBFE]/60 transition-colors shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-[#EFF6FF] text-[#1D4ED8] hover:bg-[#DBEAFE] border border-[#BFDBFE]/60 transition-colors shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
                               title="Mark as Contacted"
                             >
                               <PhoneCall className="h-3.5 w-3.5" />
@@ -608,7 +611,7 @@ export const FollowUpsView: React.FC = () => {
                               type="button"
                               disabled={updatingId === msg.id}
                               onClick={() => void handleStatusChange(msg.id, "archived")}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-[#DCFCE7] text-[#166534] hover:bg-[#BBF7D0] border border-[#86EFAC]/60 transition-colors shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-[#DCFCE7] text-[#166534] hover:bg-[#BBF7D0] border border-[#86EFAC]/60 transition-colors shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
                               title="Mark as Completed"
                             >
                               <Check className="h-3.5 w-3.5 stroke-[2.5]" />
@@ -619,7 +622,7 @@ export const FollowUpsView: React.FC = () => {
                               type="button"
                               disabled={updatingId === msg.id}
                               onClick={() => void handleStatusChange(msg.id, "pending")}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 h-[34px] rounded-lg text-[13px] font-medium bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors shadow-2xs disabled:opacity-50 shrink-0 cursor-pointer"
                               title="Reopen follow-up"
                             >
                               <RotateCcw className="h-3.5 w-3.5" />
